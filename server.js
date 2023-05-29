@@ -62,6 +62,13 @@ function ping_socket(socket) {
 }
 
 const app = express();
+app.use(function (req, res, next) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
+    next();
+});
+
 app.get("/:server/:command/:headers", async (req, res) => {
     socket.send(`%xt%${req.params.server}%${req.params.command}%1%{${req.params.headers}}%`);
     message_queue.push({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)});
@@ -75,7 +82,7 @@ async function get_socket_response(message, nb_try) {
         let responses = response_queue.filter(response => message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
         let response;
         if (responses.length > 0) {
-            response = response_queue.splice(response_queue.indexOf(responses[0]), 1);
+            response = response_queue.splice(response_queue.indexOf(responses[0]), 1)[0];
             message_queue.splice(message_queue.indexOf(responses), 1);
         }
         else {
