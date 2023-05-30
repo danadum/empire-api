@@ -83,7 +83,7 @@ async function get_socket_response(message, nb_try) {
         let response;
         if (responses.length > 0) {
             response = response_queue.splice(response_queue.indexOf(responses[0]), 1)[0];
-            message_queue.splice(message_queue.indexOf(responses), 1);
+            message_queue.splice(message_queue.indexOf(message), 1);
         }
         else {
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -92,6 +92,7 @@ async function get_socket_response(message, nb_try) {
         return response;    
     }
     else {
+        message_queue.splice(message_queue.indexOf(message), 1);
         return {command: message.command, return_code: "-1", content: {}};;
     }
 }
