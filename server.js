@@ -92,6 +92,6 @@ async function get_socket_response(message, nb_try) {
         return response;    
     }
     else {
-        return "error";
+        return {command: message.command, return_code: "-1", content: {}};;
     }
 }
