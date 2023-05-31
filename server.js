@@ -1,5 +1,6 @@
 const express = require('express');
 const WebSocket = require('ws');
+const jsdom = require('jsdom');
 require('dotenv').config();
 
 const NOM_UTILISATEUR = process.env.NOM_UTILISATEUR;
@@ -7,19 +8,36 @@ const MOT_DE_PASSE = process.env.MOT_DE_PASSE;
 const PORT = process.env.PORT || 3000;
 let message_queue = [];
 let response_queue = [];
-let socket;
+let sockets = {}
 
-function connect() {
-    socket = new WebSocket('wss://ep-live-fr1-game.goodgamestudios.com/');
+
+async function get_sockets() {
+    let sockets_file = await fetch("https://empire-html5.goodgamestudios.com/config/network/1.xml");
+    sockets_file = await sockets_file.text();
+    sockets_file = new jsdom.JSDOM(sockets_file, {contentType: "text/xml"});
+    for (instance of sockets_file.window.document.children[0].children[0].children) {
+        if (instance.children[2].textContent != "EmpireEx_23") {
+            sockets[instance.children[2].textContent] = {url: `wss://${instance.children[0].textContent}`};
+        }
+    }
+    for (let socket in sockets) {
+        connect(socket);
+    }
+}
+
+get_sockets();
+
+function connect(header) {
+    let socket = sockets[header].socket = new WebSocket(sockets[header].url);
     socket.addEventListener('open', (event) => {
-        console.log("### socket connected ###")
-        socket.send(`<msg t='sys'><body action='login' r='0'><login z='EmpireEx_3'><nick><![CDATA[]]></nick><pword><![CDATA[1065004%fr%0]]></pword></login></body></msg>`);
-        socket.send(`%xt%EmpireEx_3%lli%1%{"CONM":175,"RTM":24,"ID":0,"PL":1,"NOM":"${NOM_UTILISATEUR}","PW":"${MOT_DE_PASSE}","LT":null,"LANG":"fr","DID":"0","AID":"1674256959939529708","KID":"","REF":"https://empire.goodgamestudios.com","GCI":"","SID":9,"PLFID":1}%`);
+        console.log(`### socket ${header} connected ###`)
+        socket.send(`<msg t='sys'><body action='login' r='0'><login z='${header}'><nick><![CDATA[]]></nick><pword><![CDATA[1065004%fr%0]]></pword></login></body></msg>`);
+        socket.send(`%xt%${header}%lli%1%{"CONM":175,"RTM":24,"ID":0,"PL":1,"NOM":"${NOM_UTILISATEUR}","PW":"${MOT_DE_PASSE}","LT":null,"LANG":"fr","DID":"0","AID":"1674256959939529708","KID":"","REF":"https://empire.goodgamestudios.com","GCI":"","SID":9,"PLFID":1}%`);
     });
 
     socket.addEventListener('message', (event) => {
-        let response = event.data.toString().trim("%").split("%");
-        response = {command: response[2], return_code: response[4], content: response[5]};
+        let response = event.data.toString().split("%");
+        response = {server: header, command: response[2], return_code: response[4], content: response[5]};
         try {
             response.content = JSON.parse(response.content || "{}");
         }
@@ -33,7 +51,7 @@ function connect() {
             }
         }
         else {
-            let messages = message_queue.filter(message => message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
+            let messages = message_queue.filter(message => message.server == response.server && message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
             if (messages.length > 0) {
                 response_queue.push(response);
             }    
@@ -41,18 +59,16 @@ function connect() {
     });
 
     socket.addEventListener('error', (event) => {
-        console.log("### error in socket ###");
+        console.log(`### error in socket ${header} ###`);
         console.log(event.message);
         socket.close();
     });
 
     socket.addEventListener('close', (event) => {
-        console.log("### socket closed ###");
-        setTimeout(connect, 10000);
+        console.log(`### socket ${header} closed ###`);
+        setTimeout(() => connect(header), 10000);
     });
 }
-
-connect();
 
 function ping_socket(socket) {
     if (socket.readyState != WebSocket.CLOSED && socket.readyState != WebSocket.CLOSING) {
@@ -70,16 +86,26 @@ app.use(function (req, res, next) {
 });
 
 app.get("/:server/:command/:headers", async (req, res) => {
-    socket.send(`%xt%${req.params.server}%${req.params.command}%1%{${req.params.headers}}%`);
-    message_queue.push({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)});
-    res.send(await get_socket_response({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)}, 0));
+    if (req.params.server in sockets) {
+        sockets[req.params.server].socket.send(`%xt%${req.params.server}%${req.params.command}%1%{${req.params.headers}}%`);
+        try {
+            message_queue.push({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)});
+            res.send(await get_socket_response({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)}, 0));    
+        }
+        catch {
+            res.send({server: req.params.server, command: req.params.command, return_code: "-1", content: {"error": "Bad request"}});    
+        }
+    }
+    else {
+        res.send({server: req.params.server, command: req.params.command, return_code: "-1", content: {"error": "This server is currently not supported"}});    
+    }
 });
 
 app.listen(PORT, () => console.log(`Express Server listening on port ${PORT}`));
 
 async function get_socket_response(message, nb_try) {
     if (nb_try < 20) {
-        let responses = response_queue.filter(response => message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
+        let responses = response_queue.filter(response => message.server == response.server && message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
         let response;
         if (responses.length > 0) {
             response = response_queue.splice(response_queue.indexOf(responses[0]), 1)[0];
@@ -93,6 +119,6 @@ async function get_socket_response(message, nb_try) {
     }
     else {
         message_queue.splice(message_queue.indexOf(message), 1);
-        return {command: message.command, return_code: "-1", content: {}};;
+        return {server: message.server, command: message.command, return_code: "-1", content: {}};;
     }
 }
