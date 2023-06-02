@@ -16,15 +16,15 @@ async function get_sockets() {
     sockets_file = await sockets_file.text();
     sockets_file = new jsdom.JSDOM(sockets_file, {contentType: "text/xml"});
     for (instance of sockets_file.window.document.children[0].children[0].children) {
-        if (instance.children[2].textContent != "EmpireEx_23") {
-            sockets[instance.children[2].textContent] = {url: `wss://${instance.children[0].textContent}`};
+        let header = instance.children[2].textContent;
+        if (header != "EmpireEx_23" && !(header in sockets)) {
+            sockets[header] = {url: `wss://${instance.children[0].textContent}`, 'reconnect': true};
+            message_lists[header] = [];
+            response_lists[header] = [];
+            connect(header);
         }
     }
-    for (let socket in sockets) {
-        connect(socket);
-        message_lists[socket] = [];
-        response_lists[socket] = [];
-    }
+    setTimeout(get_sockets, 3600000);
 }
 
 get_sockets();
@@ -63,12 +63,22 @@ function connect(header) {
     socket.addEventListener('error', (event) => {
         console.log(`### error in socket ${header} ###`);
         console.log(event.message);
+        if (event.error.code == "ENOTFOUND") {
+            sockets[header].reconnect = false
+        }
         socket.close();
     });
 
     socket.addEventListener('close', (event) => {
         console.log(`### socket ${header} closed ###`);
-        setTimeout(() => connect(header), 10000);
+        if (sockets[header].reconnect) {
+            setTimeout(() => connect(header), 10000);
+        }
+        else {
+            delete sockets[header];
+            delete message_lists[header];
+            delete response_lists[header];
+        }
     });
 }
 
