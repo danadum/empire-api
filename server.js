@@ -6,8 +6,8 @@ require('dotenv').config();
 const NOM_UTILISATEUR = process.env.NOM_UTILISATEUR;
 const MOT_DE_PASSE = process.env.MOT_DE_PASSE;
 const PORT = process.env.PORT || 3000;
-let message_queue = [];
-let response_queue = [];
+let message_lists = {};
+let response_lists = {};
 let sockets = {}
 
 
@@ -22,6 +22,8 @@ async function get_sockets() {
     }
     for (let socket in sockets) {
         connect(socket);
+        message_lists[socket] = [];
+        response_lists[socket] = [];
     }
 }
 
@@ -51,9 +53,9 @@ function connect(header) {
             }
         }
         else {
-            let messages = message_queue.filter(message => message.server == response.server && message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
+            let messages = message_lists[header].filter(message => message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
             if (messages.length > 0) {
-                response_queue.push(response);
+                response_lists[header].push(response);
             }    
         }
     });
@@ -89,7 +91,7 @@ app.get("/:server/:command/:headers", async (req, res) => {
     if (req.params.server in sockets) {
         sockets[req.params.server].socket.send(`%xt%${req.params.server}%${req.params.command}%1%{${req.params.headers}}%`);
         try {
-            message_queue.push({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)});
+            message_lists[req.params.server].push({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)});
             res.send(await get_socket_response({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)}, 0));    
         }
         catch {
@@ -105,11 +107,11 @@ app.listen(PORT, () => console.log(`Express Server listening on port ${PORT}`));
 
 async function get_socket_response(message, nb_try) {
     if (nb_try < 20) {
-        let responses = response_queue.filter(response => message.server == response.server && message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
+        let responses = response_lists[message.server].filter(response => message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
         let response;
         if (responses.length > 0) {
-            response = response_queue.splice(response_queue.indexOf(responses[0]), 1)[0];
-            message_queue.splice(message_queue.indexOf(message), 1);
+            response = response_lists[message.server].splice(response_lists[message.server].indexOf(responses[0]), 1)[0];
+            message_lists[message.server].splice(message_lists[message.server].indexOf(message), 1);
         }
         else {
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -118,7 +120,7 @@ async function get_socket_response(message, nb_try) {
         return response;    
     }
     else {
-        message_queue.splice(message_queue.indexOf(message), 1);
+        message_lists[message.server].splice(message_lists[message.server].indexOf(message), 1);
         return {server: message.server, command: message.command, return_code: "-1", content: {}};;
     }
 }
