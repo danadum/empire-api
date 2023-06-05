@@ -6,8 +6,8 @@ require('dotenv').config();
 const NOM_UTILISATEUR = process.env.NOM_UTILISATEUR;
 const MOT_DE_PASSE = process.env.MOT_DE_PASSE;
 const PORT = process.env.PORT || 3000;
-let message_lists = {};
-let response_lists = {};
+let messages = {};
+let responses = {};
 let sockets = {}
 
 
@@ -19,8 +19,8 @@ async function get_sockets() {
         let header = instance.children[2].textContent;
         if (header != "EmpireEx_23" && !(header in sockets)) {
             sockets[header] = {url: `wss://${instance.children[0].textContent}`, 'reconnect': true};
-            message_lists[header] = [];
-            response_lists[header] = [];
+            messages[header] = [];
+            responses[header] = [];
             connect(header);
         }
     }
@@ -65,9 +65,8 @@ function connect(header) {
             }
         }
         else {
-            let messages = message_lists[header].filter(message => message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
-            if (messages.length > 0) {
-                response_lists[header].push(response);
+            if (messages[header].some(message => message.command == response.command && Object.keys(message.headers).every(key => message.headers[key] == response.content[key]))) {
+                responses[header].push(response);
             }    
         }
     });
@@ -88,8 +87,8 @@ function connect(header) {
         }
         else {
             delete sockets[header];
-            delete message_lists[header];
-            delete response_lists[header];
+            delete messages[header];
+            delete responses[header];
         }
     });
 }
@@ -113,7 +112,7 @@ app.get("/:server/:command/:headers", async (req, res) => {
     if (req.params.server in sockets) {
         sockets[req.params.server].socket.send(`%xt%${req.params.server}%${req.params.command}%1%{${req.params.headers}}%`);
         try {
-            message_lists[req.params.server].push({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)});
+            messages[req.params.server].push({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)});
             res.send(await get_socket_response({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)}, 0));    
         }
         catch {
@@ -129,11 +128,10 @@ app.listen(PORT, () => console.log(`Express Server listening on port ${PORT}`));
 
 async function get_socket_response(message, nb_try) {
     if (nb_try < 20) {
-        let responses = response_lists[message.server].filter(response => message.command == response.command && Object.keys(message.headers).every(key => Object.keys(response.content).includes(key) && message.headers[key] == response.content[key]));
-        let response;
-        if (responses.length > 0) {
-            response = response_lists[message.server].splice(response_lists[message.server].indexOf(responses[0]), 1)[0];
-            message_lists[message.server].splice(message_lists[message.server].indexOf(message), 1);
+        let response = responses[message.server].find(response => message.command == response.command && Object.keys(message.headers).every(key => message.headers[key] == response.content[key]));
+        if (response != undefined) {
+            responses[response.server].splice(responses[response.server].indexOf(response), 1);
+            messages[message.server].splice(messages[message.server].indexOf(message), 1);
         }
         else {
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -142,7 +140,7 @@ async function get_socket_response(message, nb_try) {
         return response;    
     }
     else {
-        message_lists[message.server].splice(message_lists[message.server].indexOf(message), 1);
+        messages[message.server].splice(messages[message.server].indexOf(message), 1);
         return {server: message.server, command: message.command, return_code: "-1", content: {}};;
     }
 }
