@@ -8,7 +8,7 @@ const MOT_DE_PASSE = process.env.MOT_DE_PASSE;
 const PORT = process.env.PORT || 3000;
 let messages = {};
 let responses = {};
-let sockets = {}
+let sockets = {};
 
 
 async function get_sockets() {
@@ -113,14 +113,14 @@ app.get("/:server/:command/:headers", async (req, res) => {
         sockets[req.params.server].socket.send(`%xt%${req.params.server}%${req.params.command}%1%{${req.params.headers}}%`);
         try {
             messages[req.params.server].push({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)});
-            res.send(await get_socket_response({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)}, 0));    
+            res.json(await get_socket_response({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)}, 0));    
         }
         catch {
-            res.send({server: req.params.server, command: req.params.command, return_code: "-1", content: {"error": "Bad request"}});    
+            res.json({server: req.params.server, command: req.params.command, return_code: "-1", content: {"error": "Bad request"}});    
         }
     }
     else {
-        res.send({server: req.params.server, command: req.params.command, return_code: "-1", content: {"error": "This server is currently not supported"}});    
+        res.json({server: req.params.server, command: req.params.command, return_code: "-1", content: {"error": "This server is currently not supported"}});    
     }
 });
 
