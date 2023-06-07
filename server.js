@@ -1,27 +1,21 @@
 const express = require('express');
 const WebSocket = require('ws');
-const jsdom = require('jsdom');
+const { XMLParser } = require('fast-xml-parser');
 require('dotenv').config();
 
 const NOM_UTILISATEUR = process.env.NOM_UTILISATEUR;
 const MOT_DE_PASSE = process.env.MOT_DE_PASSE;
-const PORT = process.env.PORT || 3000;
-let messages = {};
-let responses = {};
-let sockets = {};
+const PORT = process.env.PORT ?? 3000;
+let servers = {};
 
 
 async function get_sockets() {
-    let sockets_file = await fetch("https://empire-html5.goodgamestudios.com/config/network/1.xml");
-    sockets_file = await sockets_file.text();
-    sockets_file = new jsdom.JSDOM(sockets_file, {contentType: "text/xml"});
-    for (instance of sockets_file.window.document.children[0].children[0].children) {
-        let header = instance.children[2].textContent;
-        if (header != "EmpireEx_23" && !(header in sockets)) {
-            sockets[header] = {url: `wss://${instance.children[0].textContent}`, 'reconnect': true};
-            messages[header] = [];
-            responses[header] = [];
-            connect(header);
+    let servers_file = await fetch("https://empire-html5.goodgamestudios.com/config/network/1.xml");
+    servers_file = new XMLParser().parse(await servers_file.text());
+    for (instance of servers_file.network.instances.instance) {
+        if (instance.zone != "EmpireEx_23" && !(instance.zone in servers)) {
+            servers[instance.zone] = {url: `wss://${instance.server}`, reconnect: true, messages: [], responses: []};
+            connect(instance.zone);
         }
     }
     setTimeout(get_sockets, 3600000);
@@ -30,7 +24,7 @@ async function get_sockets() {
 get_sockets();
 
 function connect(header) {
-    let socket = sockets[header].socket = new WebSocket(sockets[header].url);
+    let socket = servers[header].socket = new WebSocket(servers[header].url);
     socket.addEventListener('open', (event) => {
         console.log(`### socket ${header} connected ###`)
         socket.send(`<msg t='sys'><body action='login' r='0'><login z='${header}'><nick><![CDATA[]]></nick><pword><![CDATA[1065004%fr%0]]></pword></login></body></msg>`);
@@ -41,7 +35,7 @@ function connect(header) {
         let response = event.data.toString().split("%");
         response = {server: header, command: response[2], return_code: response[4], content: response[5]};
         try {
-            response.content = JSON.parse(response.content || "{}");
+            response.content = JSON.parse(response.content ?? "{}");
         }
         catch {}
         if (response.command == "lli") {
@@ -60,13 +54,13 @@ function connect(header) {
                 ping_socket(socket);
             }
             else {
-                sockets[header].reconnect = false;
+                servers[header].reconnect = false;
                 socket.close();
             }
         }
         else {
-            if (messages[header].some(message => message.command == response.command && Object.keys(message.headers).every(key => message.headers[key] == response.content[key]))) {
-                responses[header].push(response);
+            if (servers[header].messages.some(message => message.command == response.command && Object.keys(message.headers).every(key => message.headers[key] == response.content[key]))) {
+                servers[header].responses.push(response);
             }    
         }
     });
@@ -75,20 +69,18 @@ function connect(header) {
         console.log(`### error in socket ${header} ###`);
         console.log(event.message);
         if (event.error.code in ["ENOTFOUND", "ETIMEDOUT"]) {
-            sockets[header].reconnect = false;
+            servers[header].reconnect = false;
         }
         socket.close();
     });
 
     socket.addEventListener('close', (event) => {
-        console.log(`### socket ${header} closed ${sockets[header].reconnect ? "" : "permanently "}###`);
-        if (sockets[header].reconnect) {
+        console.log(`### socket ${header} closed ${servers[header].reconnect ? "" : "permanently "}###`);
+        if (servers[header].reconnect) {
             setTimeout(() => connect(header), 10000);
         }
         else {
-            delete sockets[header];
-            delete messages[header];
-            delete responses[header];
+            delete servers[header];
         }
     });
 }
@@ -109,11 +101,12 @@ app.use(function (req, res, next) {
 });
 
 app.get("/:server/:command/:headers", async (req, res) => {
-    if (req.params.server in sockets) {
-        sockets[req.params.server].socket.send(`%xt%${req.params.server}%${req.params.command}%1%{${req.params.headers}}%`);
+    if (req.params.server in servers) {
         try {
-            messages[req.params.server].push({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)});
-            res.json(await get_socket_response({server: req.params.server, command: req.params.command, headers: JSON.parse(`{${req.params.headers}}`)}, 0));    
+            let JSONheaders = JSON.parse(`{${req.params.headers}}`);
+            servers[req.params.server].socket.send(`%xt%${req.params.server}%${req.params.command}%1%{${req.params.headers}}%`);
+            servers[req.params.server].messages.push({server: req.params.server, command: req.params.command, headers: JSONheaders});
+            res.json(await get_socket_response({server: req.params.server, command: req.params.command, headers: JSONheaders}, 0));    
         }
         catch {
             res.json({server: req.params.server, command: req.params.command, return_code: "-1", content: {"error": "Bad request"}});    
@@ -128,19 +121,18 @@ app.listen(PORT, () => console.log(`Express Server listening on port ${PORT}`));
 
 async function get_socket_response(message, nb_try) {
     if (nb_try < 20) {
-        let response = responses[message.server].find(response => message.command == response.command && Object.keys(message.headers).every(key => message.headers[key] == response.content[key]));
+        let response = servers[message.server].responses.find(response => message.command == response.command && Object.keys(message.headers).every(key => message.headers[key] == response.content[key]));
         if (response != undefined) {
-            responses[response.server].splice(responses[response.server].indexOf(response), 1);
-            messages[message.server].splice(messages[message.server].indexOf(message), 1);
+            servers[response.server].responses.splice(servers[response.server].responses.indexOf(response), 1);
+            servers[message.server].messages.splice(servers[message.server].messages.indexOf(message), 1);
+            return response;    
         }
         else {
-            await new Promise(resolve => setTimeout(resolve, 50));
-            response = await get_socket_response(message, nb_try + 1);
+            return await new Promise(resolve => setTimeout(() => resolve(get_socket_response(message, nb_try + 1)), 50))
         }
-        return response;    
     }
     else {
-        messages[message.server].splice(messages[message.server].indexOf(message), 1);
-        return {server: message.server, command: message.command, return_code: "-1", content: {}};;
+        servers[message.server].messages.splice(servers[message.server].messages.indexOf(message), 1);
+        return {server: message.server, command: message.command, return_code: "-1", content: {}};
     }
 }
