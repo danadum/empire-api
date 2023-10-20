@@ -68,7 +68,7 @@ function connect(header) {
     socket.addEventListener('error', (event) => {
         console.log(`### error in socket ${header} ###`);
         console.log(event.message);
-        if (event.error.code in ["ENOTFOUND", "ETIMEDOUT"]) {
+        if (["ENOTFOUND", "ETIMEDOUT"].includes(event.error.code)) {
             servers[header].reconnect = false;
         }
         socket.close();
