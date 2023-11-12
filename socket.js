@@ -74,7 +74,7 @@ function connect(servers, header) {
     });
 }
 
-async function getSocketResponse(message, nb_try) {
+async function getSocketResponse(servers, message, nb_try) {
     if (nb_try < 20) {
         let response;
         if (message.command in commands) {
@@ -89,7 +89,7 @@ async function getSocketResponse(message, nb_try) {
             return response;    
         }
         else {
-            return await new Promise(resolve => setTimeout(() => resolve(getSocketResponse(message, nb_try + 1)), 50))
+            return await new Promise(resolve => setTimeout(() => resolve(getSocketResponse(servers, message, nb_try + 1)), 50))
         }
     }
     else {

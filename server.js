@@ -42,7 +42,7 @@ app.get("/:server/:command/:headers", async (req, res) => {
             let JSONheaders = JSON.parse(`{${req.params.headers}}`);
             servers[req.params.server].socket.send(`%xt%${req.params.server}%${req.params.command}%1%{${req.params.headers}}%`);
             servers[req.params.server].messages.push({server: req.params.server, command: req.params.command, headers: JSONheaders});
-            res.json(await getSocketResponse({server: req.params.server, command: req.params.command, headers: JSONheaders}, 0));    
+            res.json(await getSocketResponse(servers, {server: req.params.server, command: req.params.command, headers: JSONheaders}, 0));    
         }
         catch {
             res.json({server: req.params.server, command: req.params.command, return_code: "-1", content: {"error": "Bad request"}});    
