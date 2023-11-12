@@ -17,8 +17,9 @@ async function launchBrowser() {
         const frame = await iframeHandle.contentFrame();
         return {browser: browser, frame: frame};
     }
-    catch {
+    catch (error){
         console.log("Error starting puppeteer browser");
+        console.log(error);
         return null;
     }
 }
