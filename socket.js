@@ -5,6 +5,34 @@ const commands = require('./commands.json');
 const NOM_UTILISATEUR = process.env.NOM_UTILISATEUR;
 const MOT_DE_PASSE = process.env.MOT_DE_PASSE;
 
+function compare_mess_resp(mess, resp) {
+    if (mess.command != resp.command) {
+        return false;
+    }
+    if (mess.command in commands) {
+        for (let [mess_key, resp_key] of Object.entries(commands[mess.command])) {
+            let mess_val = message.headers[mess_key];
+            let resp_val = resp_key.split('.').reduce((o, k) => o && o[k], resp.content)
+            if (typeof(mess_val) == "string" && typeof(resp_val) == "string") {
+                if (mess_val.toLowerCase() != resp_val.toLowerCase()) {
+                    return false;
+                }
+            }
+            else if (mess_val != resp_val) {
+                return false;
+            }
+        }    
+    }
+    else {
+        for (header in mess.headers) {
+            if (mess.headers[header] == resp.content[header]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 function connect(servers, header) {
     let socket = servers[header].socket = new WebSocket(servers[header].url);
     socket.addEventListener('open', (event) => {
@@ -41,16 +69,9 @@ function connect(servers, header) {
             }
         }
         else {
-            if (response.command in commands) {
-                if (servers[header].messages.some(message => message.command == response.command && Object.entries(commands[response.command]).every(entry => message.headers[entry[0]] == entry[1].split('.').reduce((o, k) => o && o[k], response.content)))) {
-                    servers[header].responses.push(response);
-                }        
+            if (servers[header].messages.some(message => compare_mess_resp(message, response))) {
+                servers[header].responses.push(response);
             }
-            else {
-                if (servers[header].messages.some(message => message.command == response.command && Object.keys(message.headers).every(key => message.headers[key] == response.content[key]))) {
-                    servers[header].responses.push(response);
-                }
-            } 
         }
     });
 
@@ -77,12 +98,7 @@ function connect(servers, header) {
 async function getSocketResponse(servers, message, nb_try) {
     if (nb_try < 20) {
         let response;
-        if (message.command in commands) {
-            response = servers[message.server].responses.find(response => message.command == response.command && Object.entries(commands[message.command]).every(entry => message.headers[entry[0]] == entry[1].split('.').reduce((o, k) => o && o[k], response.content)));
-        }
-        else {
-            response = servers[message.server].responses.find(response => message.command == response.command && Object.keys(message.headers).every(key => message.headers[key] == response.content[key]));
-        }
+        response = servers[message.server].responses.find(response => compare_mess_resp(message, response));
         if (response != undefined) {
             servers[response.server].responses.splice(servers[response.server].responses.indexOf(response), 1);
             servers[message.server].messages.splice(servers[message.server].messages.indexOf(message), 1);
