@@ -11,7 +11,7 @@ function compare_mess_resp(mess, resp) {
     }
     if (mess.command in commands) {
         for (let [mess_key, resp_key] of Object.entries(commands[mess.command])) {
-            let mess_val = message.headers[mess_key];
+            let mess_val = mess.headers[mess_key];
             let resp_val = resp_key.split('.').reduce((o, k) => o && o[k], resp.content)
             if (typeof(mess_val) == "string" && typeof(resp_val) == "string") {
                 if (mess_val.toLowerCase() != resp_val.toLowerCase()) {
