@@ -30,7 +30,16 @@ COPY --link . .
 
 
 # Final stage for app image
-FROM base
+FROM node:${NODE_VERSION}-alpine
+
+# Install chromium
+RUN apk add --no-cache chromium
+
+# Set production environment
+ENV CHROME_PATH=/usr/bin/chromium-browser
+
+# NodeJS app lives here
+WORKDIR /app
 
 # Copy built application
 COPY --from=build /app /app
