@@ -10,12 +10,8 @@
   "author": "danadum",
   "license": "ISC",
   "dependencies": {
-    "body-parser": "^1.20.2",
-    "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "fast-xml-parser": "^4.2.4",
-    "puppeteer-core": "^22.13.0",
-    "undici": "^5.27.2",
     "ws": "^8.13.0"
   }
 }

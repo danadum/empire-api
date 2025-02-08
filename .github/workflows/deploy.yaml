@@ -1,0 +1,35 @@
+name: Deploy 🚀
+
+on:
+  workflow_dispatch:
+  push:
+
+concurrency:
+  group: ${{ github.workflow }}
+
+jobs:
+  deploy:
+    name: Deploy 🚀
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      USERNAME: ${{ secrets.USERNAME }}
+      PASSWORD: ${{ secrets.PASSWORD }}
+      PORT: ${{ vars.PORT }}
+
+    steps:
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      - name: Setup flyctl 🔧
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Configure Secrets 🔐
+        run: flyctl -a ${{ secrets.FLY_APP_NAME }} secrets set USERNAME="$USERNAME" PASSWORD="$PASSWORD" PORT="$PORT" --stage
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Deploy 🚀
+        run: flyctl -a ${{ secrets.FLY_APP_NAME }} deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

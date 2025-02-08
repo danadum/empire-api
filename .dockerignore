@@ -1,8 +1,10 @@
-fly.toml
-Dockerfile
-.dockerignore
 node_modules
+.env
+.env.example
 .git
-.gitignore
 .github
+.gitignore
+.dockerignore
+Dockerfile
+fly.toml
 README.md

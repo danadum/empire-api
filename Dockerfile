@@ -1,48 +1,16 @@
-# syntax = docker/dockerfile:1
+FROM node:22-alpine AS base
 
-# Adjust NODE_VERSION as desired
-ARG NODE_VERSION=19.0.0
-FROM node:${NODE_VERSION}-slim as base
-
-LABEL fly_launch_runtime="NodeJS"
-
-# NodeJS app lives here
 WORKDIR /app
-
-# Set production environment
 ENV NODE_ENV=production
 
+FROM base AS build
 
-# Throw-away build stage to reduce size of final image
-FROM base as build
-
-# Install packages needed to build node modules
-RUN apt-get update -qq && \
-    apt-get install -y python-is-python3 pkg-config build-essential 
-
-# Install node modules
-COPY --link package.json package-lock.json .
+COPY package.json package-lock.json ./
 RUN npm install
 
-# Copy application code
-COPY --link . .
+FROM base AS production
 
+COPY --from=build /app/node_modules ./node_modules
+COPY . .
 
-
-# Final stage for app image
-FROM node:${NODE_VERSION}-alpine
-
-# Install chromium
-RUN apk add --no-cache chromium
-
-# Set production environment
-ENV CHROME_PATH=/usr/bin/chromium-browser
-
-# NodeJS app lives here
-WORKDIR /app
-
-# Copy built application
-COPY --from=build /app /app
-
-# Start the server by default, this can be overwritten at runtime
-CMD [ "npm", "run", "start" ]
+CMD ["npm", "start"]
