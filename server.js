@@ -1,9 +1,9 @@
-const { getGgeSockets, connectSockets } = require('./utils/ws/sockets');
+const { getSockets, connectSockets } = require('./utils/ws/sockets');
 
-getGgeSockets().then(async sockets => {
+getSockets().then(async sockets => {
     await connectSockets(sockets);
     setInterval(async () => {
-        const newSockets = await getGgeSockets();
+        const newSockets = await getSockets();
         for (const [serverHeader, socket] of Object.entries(newSockets)) {
             if (!(serverHeader in sockets) || sockets[serverHeader].socket === null) {
                 sockets[serverHeader] = socket;

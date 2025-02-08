@@ -2,7 +2,7 @@
 const { BaseSocket } = require('./baseSocket');
 const { Event } = require('../event');
 
-class GgeSocket {
+class E4kSocket {
     constructor(url, serverHeader, username, password) {
         this.url = url;
         this.serverHeader = serverHeader;
@@ -30,19 +30,18 @@ class GgeSocket {
         await this.socket.waitForXmlResponse("sys", "roundTripRes", "1")
         await this.ping();
         
-        this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: this.username, PW: this.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1});
-        const lliResponse = await this.socket.waitForJsonResponse("lli");
-        if (lliResponse.payload.status === 0) {
+        this.socket.sendJsonCommand("core_lga", {NM: this.username, PW: this.password, L: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null"});
+        const lgaResponse = await this.socket.waitForJsonResponse("core_lga");
+        if (lgaResponse.payload.status === 10005) {
             this.connected.set();
             await this.checkConnection();
-        } else if (lliResponse.payload.status === 21) {
-            const serverIndex = this.serverHeader.includes("EmpireEx_") ? this.serverHeader.split("EmpireEx_")[1] : "1";
-            const response = await fetch(`https://lp2.goodgamestudios.com/register/index.json?gameId=12&networkId=1&COUNTRY=FR&forceGeoip=false&forceInstance=true&PN=${this.username}&LANG=fr-FR&MAIL=&PW=${this.password}&AID=0&adgr=0&adID=0&camp=0&cid=&journeyHash=1720629282364650193&keyword=&matchtype=&network=&nid=0&placement=&REF=&tid=&timeZone=14&V=&campainPId=0&campainCr=0&campainLP=0&DID=0&websiteId=380635&gci=0&adClickId=&instance=${serverIndex}`, { signal: AbortSignal.timeout(60 * 1000) });
-            const data = await response.json();
-            if (data.res && data.err.length === 0) {
-                this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: this.username, PW: this.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1});
-                const lliResponse = await this.socket.waitForJsonResponse("lli");
-                if (lliResponse.payload.status === 0) {
+        } else if (lgaResponse.payload.status === 10010) {
+            this.socket.sendJsonCommand("core_reg", {PN: this.username, PW: this.password, MAIL: `${this.username}@mail.com`, LANG: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null", REF: ""});
+            const regResponse = await this.socket.waitForJsonResponse("core_reg");
+            if (regResponse.payload.status === 10005) {
+                this.socket.sendJsonCommand("core_lga", {NM: this.username, PW: this.password, L: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null"});
+                const lgaResponse = await this.socket.waitForJsonResponse("core_lga");
+                if (lgaResponse.payload.status === 10005) {
                     this.connected.set();
                     await this.checkConnection();
                 } else {
@@ -97,4 +96,4 @@ class GgeSocket {
     }
 }
 
-module.exports = { GgeSocket };
+module.exports = { E4kSocket };

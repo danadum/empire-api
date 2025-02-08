@@ -1,5 +1,6 @@
 const { XMLParser } = require('fast-xml-parser');
 const { GgeSocket } = require('./ggeSocket');
+const { E4kSocket } = require('./e4kSocket');
 
 async function getGgeSockets() {
     const sockets = {};
@@ -14,6 +15,22 @@ async function getGgeSockets() {
     return sockets;
 }
 
+async function getE4kSockets() {
+    const sockets = {};
+    const response = await fetch("https://raw.githubusercontent.com/danadum/ggs-assets/main/e4k/network.xml", { signal: AbortSignal.timeout(60 * 1000) });
+    const data = new XMLParser().parse(await response.text());
+    for (const server of data.network.instances.instance) {
+        const socket = new E4kSocket(`ws://${server.server}`, server.zone, process.env.USERNAME, process.env.PASSWORD);
+        sockets[server.zone] = socket;
+    }
+    return sockets;
+}
+
+async function getSockets() {
+    return { ...await getGgeSockets(), ...await getE4kSockets() };
+}
+
+
 async function connectSockets(sockets) {
     const connections = [];
     for (const socket of Object.values(sockets)) {
@@ -22,6 +39,6 @@ async function connectSockets(sockets) {
     // await Promise.all(connections);
 }
 module.exports = {
-    getGgeSockets,
+    getSockets,
     connectSockets
 };
