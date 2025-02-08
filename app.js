@@ -44,6 +44,14 @@ module.exports = function (sockets) {
         }
     });
 
+    app.get("/status", (req, res) => {
+        const status = {};
+        for (const [server, socket] of Object.entries(sockets)) {
+            status[server] = socket.connected.isSet;
+        }
+        res.status(200).json(status);
+    });
+
     app.get("/", (req, res) => res.status(200).send("API running"));
 
     return app;
