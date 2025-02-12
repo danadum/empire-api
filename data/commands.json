@@ -9,5 +9,8 @@
         "LT": "LT",
         "LID": "LID",
         "SV": "SV"
+    },
+    "ain": {
+        "AID": "A.AID"
     }
 }
