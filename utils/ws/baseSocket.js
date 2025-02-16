@@ -71,10 +71,9 @@ class BaseSocket {
         const message = { type, conditions, response: null, event };
         this.messages.push(message);
         const result = await event.wait(timeout);
-        if (!result) throw new Error('Timeout waiting for response');
-        const response = message.response;
         this.messages = this.messages.filter(msg => msg !== message);
-        return response;
+        if (!result) throw new Error('Timeout waiting for response');
+        return message.response;
     }
 
     waitForJsonResponse(command, data = false, timeout = 5000) {

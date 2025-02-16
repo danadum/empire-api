@@ -30,15 +30,20 @@ async function getSockets() {
     return { ...await getGgeSockets(), ...await getE4kSockets() };
 }
 
-
-async function connectSockets(sockets) {
-    const connections = [];
+function connectSockets(sockets) {
     for (const socket of Object.values(sockets)) {
-        connections.push(socket.connect());
+        socket.connect();
     }
-    // await Promise.all(connections);
 }
+
+function restartSockets(sockets) {
+    for (const socket of Object.values(sockets)) {
+        socket.restart();
+    }
+}
+
 module.exports = {
     getSockets,
-    connectSockets
+    connectSockets,
+    restartSockets
 };

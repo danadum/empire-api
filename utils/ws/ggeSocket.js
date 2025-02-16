@@ -47,44 +47,52 @@ class GgeSocket {
                         this.connected.set();
                         await this.checkConnection();
                     } else {
-                        this.reconnect = false;
-                        this.socket.close();
+                        this.disconnect(false);
                     }
                 } else {
-                    this.reconnect = false;
-                    this.socket.close();
+                    this.disconnect(false);
                 }
             } else {
-                this.socket.close();
+                this.disconnect(false);
             }
 
             this.socket.onError = (error) => {
                 console.log(`### error in socket ${this.serverHeader} ###`);
                 console.log(error.message);
                 if (["ENOTFOUND", "ETIMEDOUT"].includes(error.code)) {
-                    this.reconnect = false;
+                    this.disconnect(false);
+                } else {
+                    this.disconnect(true);
                 }
-                this.socket.close();
             };
 
             this.socket.onClose = (code, reason) => {
                 console.log(`### socket ${this.serverHeader} closed${this.reconnect ? "" : " permanently"} ###`);
-                this.connected.clear();
                 if (this.reconnect) {
+                    this.disconnect(false);
                     setTimeout(() => this.connect(), 10 * 1000);
-                }
-                else {
-                    this.socket = null;
+                } else {
+                    this.disconnect(false);
                 }
             };
         } catch (error) {
             console.log(`### error connecting to socket ${this.serverHeader} ###`);
             console.log(error.message);
-            this.reconnect = false;
-            this.connected.clear();
-            if (this.socket) this.socket.close();
-            this.socket = null;
+            this.disconnect(false);
         }
+    }
+
+    disconnect(reconnect=true) {
+        this.connected.clear();
+        this.reconnect = reconnect;
+        if (this.socket) this.socket.close();
+        if (!reconnect) this.socket = null;
+    }
+
+    async restart() {
+        this.disconnect(false);
+        this.reconnect = true;
+        await this.connect();
     }
 
     async ping() {
@@ -100,8 +108,7 @@ class GgeSocket {
             await this.socket.waitForJsonResponse("gpi");
             setTimeout(() => this.checkConnection(), 15 * 60 * 1000);
         } catch (error) {
-            this.connected.clear();
-            this.socket.close();
+            this.disconnect(true);
         }
     }
 }

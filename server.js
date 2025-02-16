@@ -1,7 +1,7 @@
-const { getSockets, connectSockets } = require('./utils/ws/sockets');
+const { getSockets, connectSockets, restartSockets } = require('./utils/ws/sockets');
 
 getSockets().then(async sockets => {
-    await connectSockets(sockets);
+    connectSockets(sockets);
     setInterval(async () => {
         const newSockets = await getSockets();
         for (const [serverHeader, socket] of Object.entries(newSockets)) {
@@ -13,7 +13,9 @@ getSockets().then(async sockets => {
     }, 60 * 60 * 1000);
     setInterval(() => {
         if (Object.values(sockets).some(socket => socket.socket === null)) { 
-            process.exit(1);    
+            process.exit(1);
+        } else {
+            restartSockets(sockets);
         }
     }, 24 * 60 * 60 * 1000);
     const app = require('./app')(sockets);
