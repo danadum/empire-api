@@ -69,7 +69,7 @@ class GgeSocket {
             this.socket.onClose = (code, reason) => {
                 console.log(`### socket ${this.serverHeader} closed${this.reconnect ? "" : " permanently"} ###`);
                 if (this.reconnect) {
-                    this.disconnect(false);
+                    this.disconnect(true);
                     setTimeout(() => this.connect(), 10 * 1000);
                 } else {
                     this.disconnect(false);
