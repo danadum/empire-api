@@ -12,5 +12,18 @@
     },
     "ain": {
         "AID": "A.AID"
+    },
+    "llsp": {
+        "LT": "LT",
+        "LID": "LID",
+        "R": "L.R"
+    },
+    "llsw": {
+        "LT": "LT",
+        "LID": "LID",
+        "SI": "SI"
+    },
+    "slse": {
+        "LT": "LT"
     }
 }

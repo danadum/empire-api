@@ -15,6 +15,8 @@ function setNestedValue(obj, path, value) {
 function compareNestedHeaders(message, response) {
     if (message === null || response === null) {
         return false;
+    } else if (Array.isArray(response)) {
+        return response.some((item) => compareNestedHeaders(message, item));
     }
     for (const key in message) {
         if (typeof message !== typeof response) {
