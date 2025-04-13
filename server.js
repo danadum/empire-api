@@ -10,7 +10,7 @@ getSockets().then(async sockets => {
                 socket.connect();
             }
         }
-    }, 60 * 60 * 1000);
+    }, 60 * 1000);
     setInterval(() => {
         if (Object.values(sockets).some(socket => socket.socket === null)) { 
             process.exit(1);
