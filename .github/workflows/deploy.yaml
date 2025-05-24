@@ -16,6 +16,8 @@ jobs:
       USERNAME: ${{ secrets.USERNAME }}
       PASSWORD: ${{ secrets.PASSWORD }}
       PORT: ${{ vars.PORT }}
+      RECAPTCHA_API_WAKE_UP_URL: ${{ secrets.RECAPTCHA_API_WAKE_UP_URL }}
+      RECAPTCHA_API_URL: ${{ secrets.RECAPTCHA_API_URL }}
 
     steps:
       - name: Checkout 🛎️
@@ -25,7 +27,7 @@ jobs:
         uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: Configure Secrets 🔐
-        run: flyctl -a ${{ secrets.FLY_APP_NAME }} secrets set USERNAME="$USERNAME" PASSWORD="$PASSWORD" PORT="$PORT" --stage
+        run: flyctl -a ${{ secrets.FLY_APP_NAME }} secrets set USERNAME="$USERNAME" PASSWORD="$PASSWORD" PORT="$PORT" RECAPTCHA_API_WAKE_UP_URL="$RECAPTCHA_API_WAKE_UP_URL" RECAPTCHA_API_URL="$RECAPTCHA_API_URL" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 

@@ -31,7 +31,11 @@ class GgeSocket {
             await this.socket.waitForXmlResponse("sys", "roundTripRes", "1")
             await this.ping();
             
-            this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: this.username, PW: this.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1});
+            const response = await fetch(`${process.env.RECAPTCHA_API_URL}/recaptcha`);
+            if (!response.ok) throw new Error("Failed to fetch recaptcha");
+            const recaptcha = await response.json();
+
+            this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: this.username, PW: this.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1, RCT: recaptcha.token});
             const lliResponse = await this.socket.waitForJsonResponse("lli");
             if (lliResponse.payload.status === 0) {
                 this.connected.set();
