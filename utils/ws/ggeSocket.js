@@ -16,6 +16,27 @@ class GgeSocket {
     async connect() {
         try {
             this.socket = new BaseSocket(this.url, this.serverHeader);
+        
+            this.socket.onError = (error) => {
+                console.log(`### error in socket ${this.serverHeader} ###`);
+                console.log(error.message);
+                if (["ENOTFOUND", "ETIMEDOUT"].includes(error.code)) {
+                    this.disconnect(false);
+                } else {
+                    this.disconnect(true);
+                }
+            };
+
+            this.socket.onClose = (code, reason) => {
+                console.log(`### socket ${this.serverHeader} closed${this.reconnect ? "" : " permanently"} ###`);
+                if (this.reconnect) {
+                    this.disconnect(true);
+                    setTimeout(() => this.connect(), 10 * 1000);
+                } else {
+                    this.disconnect(false);
+                }
+            };
+
             if (!(await this.socket.opened.wait(60000))) throw new Error("Socket not connected");
             console.log(`### socket ${this.serverHeader} connected ###`)
             
@@ -59,26 +80,6 @@ class GgeSocket {
             } else {
                 this.disconnect(false);
             }
-
-            this.socket.onError = (error) => {
-                console.log(`### error in socket ${this.serverHeader} ###`);
-                console.log(error.message);
-                if (["ENOTFOUND", "ETIMEDOUT"].includes(error.code)) {
-                    this.disconnect(false);
-                } else {
-                    this.disconnect(true);
-                }
-            };
-
-            this.socket.onClose = (code, reason) => {
-                console.log(`### socket ${this.serverHeader} closed${this.reconnect ? "" : " permanently"} ###`);
-                if (this.reconnect) {
-                    this.disconnect(true);
-                    setTimeout(() => this.connect(), 10 * 1000);
-                } else {
-                    this.disconnect(false);
-                }
-            };
         } catch (error) {
             console.log(`### error connecting to socket ${this.serverHeader} ###`);
             console.log(error.message);
