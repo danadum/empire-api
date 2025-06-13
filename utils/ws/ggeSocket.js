@@ -3,11 +3,12 @@ const { BaseSocket } = require('./baseSocket');
 const { Event } = require('../event');
 
 class GgeSocket {
-    constructor(url, serverHeader, username, password) {
+    constructor(url, serverHeader, username, password, networkId) {
         this.url = url;
         this.serverHeader = serverHeader;
         this.username = username;
         this.password = password;
+        this.networkId = networkId;
         this.connected = new Event();
         this.reconnect = true;
         this.socket = null;
@@ -63,7 +64,7 @@ class GgeSocket {
                 await this.checkConnection();
             } else if (lliResponse.payload.status === 21) {
                 const serverIndex = this.serverHeader.includes("EmpireEx_") ? this.serverHeader.split("EmpireEx_")[1] : "1";
-                const response = await fetch(`https://lp2.goodgamestudios.com/register/index.json?gameId=12&networkId=1&COUNTRY=FR&forceGeoip=false&forceInstance=true&PN=${this.username}&LANG=fr-FR&MAIL=&PW=${this.password}&AID=0&adgr=0&adID=0&camp=0&cid=&journeyHash=1720629282364650193&keyword=&matchtype=&network=&nid=0&placement=&REF=&tid=&timeZone=14&V=&campainPId=0&campainCr=0&campainLP=0&DID=0&websiteId=380635&gci=0&adClickId=&instance=${serverIndex}`, { signal: AbortSignal.timeout(60 * 1000) });
+                const response = await fetch(`https://lp2.goodgamestudios.com/register/index.json?gameId=12&networkId=${this.networkId}&COUNTRY=FR&forceGeoip=false&forceInstance=true&PN=${this.username}&LANG=fr-FR&MAIL=&PW=${this.password}&AID=0&adgr=0&adID=0&camp=0&cid=&journeyHash=1720629282364650193&keyword=&matchtype=&network=&nid=0&placement=&REF=&tid=&timeZone=14&V=&campainPId=0&campainCr=0&campainLP=0&DID=0&websiteId=380635&gci=0&adClickId=&instance=${serverIndex}`, { signal: AbortSignal.timeout(60 * 1000) });
                 const data = await response.json();
                 if (data.res && data.err.length === 0) {
                     this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: this.username, PW: this.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1});

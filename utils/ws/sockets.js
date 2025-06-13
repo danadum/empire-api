@@ -4,12 +4,19 @@ const { E4kSocket } = require('./e4kSocket');
 
 async function getGgeSockets() {
     const sockets = {};
-    const response = await fetch("https://empire-html5.goodgamestudios.com/config/network/1.xml", { signal: AbortSignal.timeout(60 * 1000) });
-    const data = new XMLParser().parse(await response.text());
-    for (const server of data.network.instances.instance) {
-        if (server.zone != "EmpireEx_23") {
-            const socket = new GgeSocket(`wss://${server.server}`, server.zone, process.env.USERNAME, process.env.PASSWORD);
-            sockets[server.zone] = socket;
+    const networksIds = [1, 5, 11, 26, 34, 39, 64, 65, 68];
+
+    for (const networkId of networksIds) {
+        const response = await fetch(`https://empire-html5.goodgamestudios.com/config/network/${networkId}.xml`, { signal: AbortSignal.timeout(60 * 1000) });
+        const data = new XMLParser().parse(await response.text());
+        if (!Array.isArray(data.network.instances.instance)) {
+            data.network.instances.instance = [data.network.instances.instance];
+        }
+        for (const server of data.network.instances.instance) {
+            if (server.zone != "EmpireEx_23") {
+                const socket = new GgeSocket(`wss://${server.server}`, server.zone, process.env.USERNAME, process.env.PASSWORD, networkId);
+                sockets[server.zone] = socket;
+            }
         }
     }
     return sockets;
