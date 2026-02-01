@@ -14,7 +14,7 @@ async function getGgeSockets() {
         }
         for (const server of data.network.instances.instance) {
             if (server.zone != "EmpireEx_23") {
-                const socket = new GgeSocket(`wss://${server.server}`, server.zone, process.env.USERNAME, process.env.PASSWORD, networkId);
+                const socket = new GgeSocket(`wss://${server.server}:443`, server.zone, process.env.USERNAME, process.env.PASSWORD, networkId);
                 sockets[server.zone] = socket;
             }
         }
@@ -33,7 +33,7 @@ async function getE4kSockets() {
             data.network.instances.instance = [data.network.instances.instance];
         }
         for (const server of data.network.instances.instance) {
-            const socket = new E4kSocket(`ws://${server.server}`, server.zone, process.env.USERNAME, process.env.PASSWORD);
+            const socket = new E4kSocket(`tcp://${server.server}:443`, server.zone, process.env.USERNAME, process.env.PASSWORD);
             sockets[server.zone] = socket;
         }
     }

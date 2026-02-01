@@ -1,5 +1,5 @@
-
-const { BaseSocket } = require('./baseSocket');
+const { BaseWsSocket } = require('./baseWsSocket');
+const { BaseTcpSocket } = require('./baseTcpSocket');
 const { Event } = require('../event');
 
 class E4kSocket {
@@ -15,7 +15,11 @@ class E4kSocket {
 
     async connect() {
         try {
-            this.socket = new BaseSocket(this.url, this.serverHeader);
+            if (this.url.startsWith("ws")) {
+                this.socket = new BaseWsSocket(this.url, this.serverHeader);
+            } else {
+                this.socket = new BaseTcpSocket(this.url, this.serverHeader);
+            }
 
             this.socket.onError = (error) => {
                 console.log(`### error in socket ${this.serverHeader} ###`);

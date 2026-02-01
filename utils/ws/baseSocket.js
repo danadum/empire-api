@@ -1,10 +1,8 @@
-const WebSocket = require('ws');
 const { Event } = require('../event');
 const { compareNestedHeaders } = require('../nestedHeaders');
 
 class BaseSocket {
-    constructor(url, serverHeader, onSend = null, onOpen = null, onMessage = null, onError = null, onClose = null) {
-        this.url = url;
+    constructor(serverHeader, onSend = null, onOpen = null, onMessage = null, onError = null, onClose = null) {
         this.serverHeader = serverHeader;
         this.onSend = onSend;
         this.onOpen = onOpen;
@@ -14,22 +12,14 @@ class BaseSocket {
         this.opened = new Event();
         this.closed = new Event();
         this.messages = [];
-
-        this.ws = new WebSocket(url);
-
-        this.ws.on('open', () => this._onOpen());
-        this.ws.on('message', (message) => this._onMessage(message));
-        this.ws.on('error', (error) => this._onError(error));
-        this.ws.on('close', (code, reason) => this._onClose(code, reason));
     }
 
     _onOpen() {
         this.opened.set();
-        if (this.onOpen) this.onOpen(this.ws);
+        if (this.onOpen) this.onOpen();
     }
 
     async _onMessage(message) {
-        message = message.toString();
         const response = await this.parseResponse(message);
         this._processResponse(response);
         if (this.onMessage) this.onMessage(message);
@@ -45,10 +35,18 @@ class BaseSocket {
         if (this.onClose) this.onClose(code, reason);
     }
 
+    _send(data) {
+        throw new Error('_send() must be implemented by subclass');
+    }
+
+    close() {
+        throw new Error('close() must be implemented by subclass');
+    }
+
     send(data) {
         if (this.onSend) this.onSend(data);
         console.log(`Sending data: ${data}`);
-        this.ws.send(data);
+        this._send(data);
     }
 
     _sendCommandMessage(data) {
@@ -139,10 +137,6 @@ class BaseSocket {
                 break;
             }
         }
-    }
-
-    close() {
-        this.ws.close();
     }
 }
 
