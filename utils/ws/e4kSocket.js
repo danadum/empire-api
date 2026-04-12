@@ -11,9 +11,15 @@ class E4kSocket {
         this.connected = new Event();
         this.reconnect = true;
         this.socket = null;
+        this.cooldownTimer = null;
     }
 
     async connect() {
+        this.reconnect = true;
+        if (this.cooldownTimer) {
+            clearTimeout(this.cooldownTimer);
+            this.cooldownTimer = null;
+        }
         try {
             if (this.url.startsWith("ws")) {
                 this.socket = new BaseWsSocket(this.url, this.serverHeader);
@@ -54,13 +60,23 @@ class E4kSocket {
             await this.socket.waitForXmlResponse("sys", "joinOK", "1")
             this.socket.sendXmlMessage("sys", "roundTrip", "1", "")
             await this.socket.waitForXmlResponse("sys", "roundTripRes", "1")
-            await this.ping();
-            
             this.socket.sendJsonCommand("core_lga", {NM: this.username, PW: this.password, L: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null"});
             const lgaResponse = await this.socket.waitForJsonResponse("core_lga");
             if (lgaResponse.payload.status === 10005) {
                 this.connected.set();
+                this.ping();
                 await this.checkConnection();
+            } else if (lgaResponse.payload.data?.CD !== undefined) {
+                const cooldown = (lgaResponse.payload.data.CD || 60) * 1000;
+                console.log(`### socket ${this.serverHeader} rate limited, retrying in ${cooldown / 1000}s ###`);
+                this.socket.onClose = () => {};
+                this.socket.onError = () => {};
+                this.socket.close();
+                this.cooldownTimer = setTimeout(() => {
+                    this.cooldownTimer = null;
+                    this.connect();
+                }, cooldown);
+                return;
             } else if (lgaResponse.payload.status === 10010) {
                 this.socket.sendJsonCommand("core_reg", {PN: this.username, PW: this.password, MAIL: `${this.username}@mail.com`, LANG: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null", REF: ""});
                 const regResponse = await this.socket.waitForJsonResponse("core_reg");
@@ -69,6 +85,7 @@ class E4kSocket {
                     const lgaResponse = await this.socket.waitForJsonResponse("core_lga");
                     if (lgaResponse.payload.status === 10005) {
                         this.connected.set();
+                        this.ping();
                         await this.checkConnection();
                     } else {
                         this.disconnect(false);
@@ -102,7 +119,7 @@ class E4kSocket {
     async ping() {
         if (!this.connected.isSet) return;
         this.socket.sendRawCommand("pin", ["<RoundHouseKick>"]);
-        setTimeout(() => this.ping(), 60 * 1000);
+        setTimeout(() => this.ping(), 30 * 1000);
     }
 
     async checkConnection() {

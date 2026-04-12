@@ -12,9 +12,15 @@ class GgeSocket {
         this.connected = new Event();
         this.reconnect = true;
         this.socket = null;
+        this.cooldownTimer = null;
     }
 
     async connect() {
+        this.reconnect = true;
+        if (this.cooldownTimer) {
+            clearTimeout(this.cooldownTimer);
+            this.cooldownTimer = null;
+        }
         try {
             if (this.url.startsWith("ws")) {
                 this.socket = new BaseWsSocket(this.url, this.serverHeader);
@@ -55,8 +61,6 @@ class GgeSocket {
             await this.socket.waitForXmlResponse("sys", "joinOK", "1")
             this.socket.sendXmlMessage("sys", "roundTrip", "1", "")
             await this.socket.waitForXmlResponse("sys", "roundTripRes", "1")
-            await this.ping();
-            
             // const response = await fetch(`${process.env.RECAPTCHA_API_URL}/recaptcha`);
             // if (!response.ok) throw new Error("Failed to fetch recaptcha");
             // const recaptcha = await response.json();
@@ -65,7 +69,19 @@ class GgeSocket {
             const lliResponse = await this.socket.waitForJsonResponse("lli");
             if (lliResponse.payload.status === 0) {
                 this.connected.set();
+                this.ping();
                 await this.checkConnection();
+            } else if (lliResponse.payload.status === 453) {
+                const cooldown = (lliResponse.payload.data?.CD || 60) * 1000;
+                console.log(`### socket ${this.serverHeader} rate limited, retrying in ${cooldown / 1000}s ###`);
+                this.socket.onClose = () => {};
+                this.socket.onError = () => {};
+                this.socket.close();
+                this.cooldownTimer = setTimeout(() => {
+                    this.cooldownTimer = null;
+                    this.connect();
+                }, cooldown);
+                return;
             } else if (lliResponse.payload.status === 21) {
                 const serverIndex = this.serverHeader.includes("EmpireEx_") ? this.serverHeader.split("EmpireEx_")[1] : "1";
                 const response = await fetch(`https://lp2.goodgamestudios.com/register/index.json?gameId=12&networkId=${this.networkId}&COUNTRY=FR&forceGeoip=false&forceInstance=true&PN=${this.username}&LANG=fr-FR&MAIL=&PW=${this.password}&AID=0&adgr=0&adID=0&camp=0&cid=&journeyHash=1720629282364650193&keyword=&matchtype=&network=&nid=0&placement=&REF=&tid=&timeZone=14&V=&campainPId=0&campainCr=0&campainLP=0&DID=0&websiteId=380635&gci=0&adClickId=&instance=${serverIndex}`, { signal: AbortSignal.timeout(60 * 1000) });
@@ -75,6 +91,7 @@ class GgeSocket {
                     const lliResponse = await this.socket.waitForJsonResponse("lli");
                     if (lliResponse.payload.status === 0) {
                         this.connected.set();
+                        this.ping();
                         await this.checkConnection();
                     } else {
                         this.disconnect(false);
@@ -108,7 +125,7 @@ class GgeSocket {
     async ping() {
         if (!this.connected.isSet) return;
         this.socket.sendRawCommand("pin", ["<RoundHouseKick>"]);
-        setTimeout(() => this.ping(), 60 * 1000);
+        setTimeout(() => this.ping(), 30 * 1000);
     }
 
     async checkConnection() {
