@@ -17,3 +17,7 @@ primary_region = 'cdg'
 
 [[vm]]
   size = 'shared-cpu-1x'
+
+[[restart]]
+  policy = "always"
+  processes = ["app"]
