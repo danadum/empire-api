@@ -45,7 +45,7 @@ class BaseSocket {
 
     send(data) {
         if (this.onSend) this.onSend(data);
-        console.log(`Sending data: ${data}`);
+        console.log(`Sending data: ${data.replace(/"PW":"(?:[^"\\]|\\.)*"/g, '"PW":"***"')}`);
         this._send(data);
     }
 
