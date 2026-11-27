@@ -131,6 +131,19 @@ test('a ban of exactly 24 h is waited out, one second more gets a new account', 
     assert.equal(moved.stats.registrations, 1);
 });
 
+for (const ban of [{ RS: 3600, GDPR: 1 }, { GDPR: 0 }, { RS: 0, GDPR: 0 }, { RS: -5, GDPR: 0 }]) {
+    test(`a ban answered with ${JSON.stringify(ban)} moves the zone to a new account, it is not waited out`, async (t) => {
+        lowered(t, { zoneSpacingMs: 0 });
+        const zone = `NoEnd${JSON.stringify(ban).replace(/\W/g, '')}`;
+        const fake = await fakeE4kServer(new Map([['user', { password: 'secret', ban }]]));
+        t.after(() => fake.server.close());
+        const socket = await e4k(t, fake, zone);
+        assert.equal(socket.connected.isSet, true);
+        assert.equal(socket.generation, 1);
+        assert.equal(fake.stats.registrations, 1);
+    });
+}
+
 for (const k of [9, 40]) {
     test(`at a fresh start, accounts 0..${k} banned: the search finds and registers ${k + 1} in O(log k) logins`, async (t) => {
         const zone = `Gallop${k}`;

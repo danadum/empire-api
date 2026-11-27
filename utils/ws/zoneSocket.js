@@ -6,7 +6,7 @@ const { accountFor, registrationWait, takeRegistration, limits } = require('../a
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // What GGE and E4K share: handshake, account generations, registration pace, reconnection. A subclass sends its login,
-// login(account) -> { status: 'ok' | 'banned' | 'missing' | 'cooldown' | 'other', seconds }, and its registration,
+// login(account) -> { status: 'ok' | 'banned' | 'missing' | 'cooldown' | 'other', seconds, gdpr }, and its registration,
 // register(account) -> { status: 'refused', reason } | { status: 'registered' } (log in on a new connection) | a login outcome.
 class ZoneSocket {
     constructor(url, serverHeader, username, password) {
@@ -112,8 +112,9 @@ class ZoneSocket {
                 this.ping(attempt);
                 await this.checkConnection(attempt);
             } else if (outcome.status === 'banned') {
-                console.log(`### socket ${this.serverHeader}: account generation ${generation} banned for ${outcome.seconds}s ###`);
-                if (outcome.seconds > limits.newAccountBan) return this.longBan(attempt, generation);
+                console.log(`### socket ${this.serverHeader}: account generation ${generation} banned (RS ${outcome.seconds}, GDPR ${outcome.gdpr}) ###`);
+                // A deleted account (GDPR) or a ban without a usable end never comes back.
+                if (outcome.gdpr === 1 || !(outcome.seconds > 0) || outcome.seconds > limits.newAccountBan) return this.longBan(attempt, generation);
                 this.search = null;
                 this.generation = generation;
                 this.park();

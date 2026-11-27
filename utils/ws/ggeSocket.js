@@ -15,7 +15,7 @@ class GgeSocket extends ZoneSocket {
         this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: account.username, PW: account.password, LT: null, LANG: "fr", DID: "0", AID: account.aid, KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1 /*, RCT: recaptcha.token */});
         const { status, data } = (await this.socket.waitForJsonResponse("lli")).payload;
         if (status === 0) return { status: 'ok' };
-        if (status === 27) return { status: 'banned', seconds: data?.RS ?? 0 };
+        if (status === 27) return { status: 'banned', seconds: data?.RS, gdpr: data?.GDPR };
         if (status === 453) return { status: 'cooldown', seconds: data?.CD || 60 };
         if (status === 21) return { status: 'missing' };
         return { status: 'other' };
