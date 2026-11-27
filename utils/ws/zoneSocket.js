@@ -48,7 +48,7 @@ class ZoneSocket {
                 console.log(`### error in socket ${this.serverHeader} ###`);
                 console.log(error.message);
                 if (["ENOTFOUND", "ETIMEDOUT"].includes(error.code)) {
-                    this.disconnect(false);
+                    this.fail(attempt);
                 } else {
                     this.disconnect(true);
                 }
@@ -134,7 +134,7 @@ class ZoneSocket {
             if (this.registering) {
                 this.park();
             } else {
-                this.disconnect(false);
+                this.fail(attempt);
             }
         } finally {
             if (current()) this.registering = false;
@@ -170,6 +170,13 @@ class ZoneSocket {
         await sleep(limits.probePauseMs);
         if (attempt !== this.attempt || !this.reconnect) return;
         return this.connect();
+    }
+
+    // Down, for the 10-minute loop to replace; but a zone in a search is parked and resumes it, bounds kept.
+    fail(attempt) {
+        if (!this.search) return this.disconnect(false);
+        this.park();
+        this.schedule(attempt, limits.searchRetryMs);
     }
 
     schedule(attempt, ms) {

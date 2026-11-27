@@ -11,7 +11,8 @@ function handshake(message, onCommand) {
 }
 
 // Fake E4K server with a registry of accounts (name -> { password, banSeconds }), counters and the requests received.
-// options: banEveryone (seconds), closeAfterNotFound, refuseRegistration, rateLimitOnce (names answered CD 1 once).
+// options: banEveryone (seconds), closeAfterNotFound, refuseRegistration, rateLimitOnce (names answered CD 1 once),
+// dropOnce (names whose first login gets no reply).
 async function fakeE4kServer(accounts, options = {}) {
     const stats = { connections: 0, logins: 0, registrations: 0, requests: [] };
     const server = net.createServer((client) => {
@@ -29,6 +30,7 @@ async function fakeE4kServer(accounts, options = {}) {
                         stats.logins++;
                         stats.requests.push({ command, name: data.NM, aid: data.AID });
                         if (options.rateLimitOnce?.delete(data.NM)) return '%xt%core_lga%1%10458%{"CD":1}%';
+                        if (options.dropOnce?.delete(data.NM)) return null;
                         const account = accounts.get(data.NM);
                         const ban = options.banEveryone ?? account?.banSeconds;
                         if (ban) return `%xt%core_lga%1%10012%{"D":{"RS":${ban},"GDPR":0}}%`;

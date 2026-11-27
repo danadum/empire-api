@@ -172,6 +172,22 @@ test('a rate limit during the search waits its cooldown and probes the same gene
     assert.deepEqual(loginsOf(fake, zone), [0, 1, 2, 4, 4, 8, 16, 12, 10]);
 });
 
+test('a login timing out during the search parks the zone, which resumes the search from the same bounds', { timeout: 20000 }, async (t) => {
+    lowered(t, { searchRetryMs: 200 });
+    const zone = 'GallopTimeout';
+    const fake = await fakeE4kServer(registry(zone, 10, 1), { dropOnce: new Set([accountFor(zone, 4, 'user', 'secret').username]) });
+    t.after(() => fake.server.close());
+    const socket = await e4k(t, fake, zone);
+    assert.equal(socket.parked, true);
+    assert.equal(isDown(socket), false, 'not replaced by the 10-minute loop');
+    assert.deepEqual(socket.search, { start: 0, banned: 2, missing: null, probe: 4 });
+    assert.ok(await until(() => socket.connected.isSet, 3000));
+    assert.equal(socket.generation, 10);
+    const logins = loginsOf(fake, zone);
+    assert.deepEqual(logins, [0, 1, 2, 4, 4, 8, 16, 12, 10]);
+    assert.ok(logins.length <= 2 * Math.ceil(Math.log2(11)) + 3 + 1);
+});
+
 test('a zone stopped during a pause of the search logs in no more', async (t) => {
     lowered(t, { probePauseMs: 300 });
     const zone = 'GallopStopped';

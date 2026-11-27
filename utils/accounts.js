@@ -17,6 +17,8 @@ const limits = {
     // Pause between two logins while looking for a zone's newest account, and how far that search gallops.
     probePauseMs: 2000,
     searchSpan: 2 ** 16,
+    // A search cut by a network failure or a timeout resumes on the same object after this delay.
+    searchRetryMs: 10 * 60 * 1000,
 };
 
 const registrations = [];
