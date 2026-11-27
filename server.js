@@ -1,4 +1,4 @@
-const { getSockets, connectSockets, restartSockets } = require('./utils/ws/sockets');
+const { getSockets, connectSockets, restartSockets, isDown } = require('./utils/ws/sockets');
 // const { wakeUpRecaptchaApi } = require('./utils/recaptcha');
 
 getSockets().then(async sockets => {
@@ -10,14 +10,14 @@ getSockets().then(async sockets => {
         //     await wakeUpRecaptchaApi();
         // }
         for (const [serverHeader, socket] of Object.entries(newSockets)) {
-            if (!(serverHeader in sockets) || sockets[serverHeader].socket === null) {
+            if (!(serverHeader in sockets) || isDown(sockets[serverHeader])) {
                 sockets[serverHeader] = socket;
                 socket.connect();
             }
         }
     }, 10 * 60 * 1000);
     setInterval(async () => {
-        if (Object.values(sockets).some(socket => socket.socket === null)) { 
+        if (Object.values(sockets).some(isDown)) { 
             process.exit(1);
         } else {
             // await wakeUpRecaptchaApi();

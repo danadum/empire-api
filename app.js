@@ -30,7 +30,7 @@ module.exports = function (sockets) {
                         responseHeaders = messageHeaders;
                     }
 
-                    const response = await sockets[req.params.server].socket.waitForJsonResponse(req.params.command, responseHeaders, timeout = 1000);
+                    const response = await sockets[req.params.server].socket.waitForJsonResponse(req.params.command, responseHeaders, 1000);
                     res.status(200).json({server: req.params.server, command: req.params.command, return_code: response.payload.status, content: response.payload.data});
                 } catch (error) {
                     console.log(error.message);

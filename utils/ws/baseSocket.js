@@ -12,6 +12,7 @@ class BaseSocket {
         this.opened = new Event();
         this.closed = new Event();
         this.messages = [];
+        this.unmatchedErrors = [];
     }
 
     _onOpen() {
@@ -70,8 +71,11 @@ class BaseSocket {
         const message = { type, conditions, response: null, event };
         this.messages.push(message);
         const result = await event.wait(timeout);
-        this.messages = this.messages.filter(msg => msg !== message);
-        if (!result) throw new Error('Timeout waiting for response');
+        if (!result) {
+            this.messages = this.messages.filter(msg => msg !== message);
+            if (type === 'json') this._assignErrors(conditions.command);
+            throw new Error('Timeout waiting for response');
+        }
         return message.response;
     }
 
@@ -115,28 +119,47 @@ class BaseSocket {
         }
     }
 
+    _matches(message, response) {
+        return (response.type === 'json' && message.type === 'json' &&
+                message.conditions.command === response.payload.command &&
+                (message.conditions.data === false ||
+                    (message.conditions.data === true && response.payload.data !== null) ||
+                    message.conditions.data === response.payload.data ||
+                    (typeof response.payload.data === 'object' &&
+                        typeof message.conditions.data === 'object' &&
+                        compareNestedHeaders(message.conditions.data, response.payload.data)))) ||
+            (response.type === 'xml' && message.type === 'xml' &&
+                message.conditions.t === response.payload.t &&
+                message.conditions.action === response.payload.action &&
+                message.conditions.r === response.payload.r);
+    }
+
+    _resolve(message, response) {
+        this.messages = this.messages.filter(msg => msg !== message);
+        message.response = response;
+        message.event.set();
+    }
+
+    // The game answers errors with only the command and a status (e.g. %xt%hgh%1%21%), nothing to match on.
+    // They wait until no other request of that command can still get a matching reply, then go out in order:
+    // an error never takes the place of a success, and errors left with no request waiting are dropped.
+    _assignErrors(command) {
+        const waiting = this.messages.filter(msg => msg.type === 'json' && msg.conditions.command === command);
+        const errors = this.unmatchedErrors.filter(error => error.payload.command === command);
+        if (errors.length === 0 || errors.length < waiting.length) return;
+        this.unmatchedErrors = this.unmatchedErrors.filter(error => error.payload.command !== command);
+        errors.slice(errors.length - waiting.length).forEach((error, i) => this._resolve(waiting[i], error));
+    }
+
     _processResponse(response) {
         console.log(`Processing response: ${JSON.stringify(response)}`);
-        for (const message of this.messages) {
-            if (
-                (response.type === 'json' && message.type === 'json' &&
-                    message.conditions.command === response.payload.command &&
-                    (message.conditions.data === false ||
-                        (message.conditions.data === true && response.payload.data !== null) ||
-                        message.conditions.data === response.payload.data ||
-                        (typeof response.payload.data === 'object' &&
-                            typeof message.conditions.data === 'object' &&
-                            compareNestedHeaders(message.conditions.data, response.payload.data)))) ||
-                (response.type === 'xml' && message.type === 'xml' &&
-                    message.conditions.t === response.payload.t &&
-                    message.conditions.action === response.payload.action &&
-                    message.conditions.r === response.payload.r)
-            ) {
-                message.response = response;
-                message.event.set();
-                break;
-            }
+        const message = this.messages.find(msg => this._matches(msg, response));
+        if (message) {
+            this._resolve(message, response);
+        } else if (response.type === 'json' && response.payload.status !== 0 && response.payload.data === null) {
+            this.unmatchedErrors.push(response);
         }
+        if (response.type === 'json') this._assignErrors(response.payload.command);
     }
 }
 
