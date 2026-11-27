@@ -81,6 +81,14 @@ class ZoneSocket {
 
             let outcome = await this.login(account);
             if (outcome.status === 'missing') {
+                if (this.search?.shortBanEnd !== undefined) {
+                    const wait = Math.max(0, this.search.shortBanEnd - Date.now()) + limits.banMarginMs;
+                    console.log(`### socket ${this.serverHeader}: no account after generation ${generation - 1}, waiting out its ban (${Math.round(wait / 1000)}s) ###`);
+                    this.search = null;
+                    this.generation = generation - 1;
+                    this.park();
+                    return this.schedule(attempt, wait);
+                }
                 if (this.search) {
                     this.search.missing = generation;
                     if (generation - this.search.banned > 1) return this.probe(attempt, Math.floor((this.search.banned + generation) / 2));
@@ -115,10 +123,9 @@ class ZoneSocket {
                 console.log(`### socket ${this.serverHeader}: account generation ${generation} banned (RS ${outcome.seconds}, GDPR ${outcome.gdpr}) ###`);
                 // A deleted account (GDPR) or a ban without a usable end never comes back.
                 if (outcome.gdpr === 1 || !(outcome.seconds > 0) || outcome.seconds > limits.newAccountBan) return this.longBan(attempt, generation);
-                this.search = null;
-                this.generation = generation;
-                this.park();
-                this.schedule(attempt, outcome.seconds * 1000 + limits.banMarginMs);
+                // A newer account may work: used if it logs in, walked from if banned long, the ban waited out if missing.
+                this.search = { start: generation, banned: generation, missing: null, shortBanEnd: Date.now() + outcome.seconds * 1000 };
+                return this.probe(attempt, generation + 1);
             } else if (outcome.status === 'cooldown') {
                 console.log(`### socket ${this.serverHeader} rate limited, retrying in ${outcome.seconds}s ###`);
                 this.closeQuietly();
@@ -148,6 +155,7 @@ class ZoneSocket {
     longBan(attempt, generation) {
         if (!this.search) this.search = { start: generation, banned: generation, missing: null };
         const search = this.search;
+        delete search.shortBanEnd;
         search.banned = generation;
         if (search.missing === null) {
             const next = search.start + Math.max(1, 2 * (generation - search.start));

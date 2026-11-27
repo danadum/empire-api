@@ -108,11 +108,38 @@ test('a short ban is waited out: parked, logged in again once it is over, no new
     assert.equal(socket.generation, 0);
     accounts.get('user').banSeconds = 0;
     await sleep(1000);
-    assert.equal(fake.stats.logins, 1, 'not before the end of the ban plus the margin');
+    assert.deepEqual(loginsOf(fake, zone), [0, 1], 'generation 1 tried, missing; nothing more before the end of the ban plus the margin');
     assert.ok(await until(() => socket.connected.isSet, 2000));
     assert.equal(socket.generation, 0);
-    assert.equal(fake.stats.logins, 2);
+    assert.deepEqual(loginsOf(fake, zone), [0, 1, 0]);
     assert.equal(fake.stats.registrations, 0);
+});
+
+test('a short ban on an older account does not hide a newer one that works', async (t) => {
+    const zone = 'ShortBanNewer';
+    const accounts = registry(zone, 0, 2);
+    accounts.get('user').banSeconds = 12 * 3600;
+    const fake = await fakeE4kServer(accounts);
+    t.after(() => fake.server.close());
+    const socket = await e4k(t, fake, zone);
+    assert.equal(socket.connected.isSet, true);
+    assert.equal(socket.generation, 1);
+    assert.deepEqual(loginsOf(fake, zone), [0, 1]);
+    assert.equal(fake.stats.registrations, 0);
+});
+
+test('a short ban followed by a newer account banned long continues the walk', async (t) => {
+    lowered(t, { zoneSpacingMs: 0 });
+    const zone = 'ShortBanThenLong';
+    const accounts = registry(zone, 2);
+    accounts.get('user').banSeconds = 12 * 3600;
+    const fake = await fakeE4kServer(accounts);
+    t.after(() => fake.server.close());
+    const socket = await e4k(t, fake, zone);
+    assert.equal(socket.connected.isSet, true);
+    assert.equal(socket.generation, 2);
+    assert.deepEqual(loginsOf(fake, zone), [0, 1, 2, 2]);
+    assert.equal(fake.stats.registrations, 1);
 });
 
 test('a ban of exactly 24 h is waited out, one second more gets a new account', async (t) => {
