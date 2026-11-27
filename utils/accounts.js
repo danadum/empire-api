@@ -1,9 +1,10 @@
 const crypto = require('crypto');
 
-const MAX_GENERATION = 5;
+// One derived account per zone at most: registration was IP-banned from the 3rd account created on a server (2024).
+const MAX_GENERATION = 1;
 // The client itself treats a ban of 4 weeks or more as a long one (generic_login_banned); shorter ones are waited out.
 const LONG_BAN = 28 * 24 * 60 * 60;
-// Accounts created from one IP are what gets registration IP-banned (from the 3rd account on a server, 2024).
+// Registration attempts of the whole process, whatever the zone.
 const MAX_REGISTRATIONS_PER_DAY = 2;
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const registrations = [];

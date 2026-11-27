@@ -38,3 +38,33 @@ test('GGE: a long ban moves to a new account, registered over HTTP on the zone\'
     assert.ok(accounts.has(accountFor('EmpireExSP_2', 1, 'user', 'secret').username));
     assert.equal(logins, 3, 'banned login, "not found", login after registration');
 });
+
+test('GGE: the daily restart during a registration does not send it twice', async (t) => {
+    const accounts = new Map([['user', { password: 'secret', banSeconds: LONG }]]);
+    const game = new WebSocketServer({ port: 0 });
+    t.after(() => game.close());
+    game.on('connection', (ws) => ws.on('message', (raw) => {
+        const reply = handshake(raw.toString(), (command, data) => {
+            if (command !== 'lli') return null;
+            const account = accounts.get(data.NOM);
+            if (account?.banSeconds) return `%xt%lli%1%27%{"RS":${account.banSeconds},"GDPR":0}%`;
+            return account ? '%xt%lli%1%0%{}%' : '%xt%lli%1%21%';
+        });
+        if (reply) ws.send(reply);
+    }));
+    let registrations = 0;
+    let socket;
+    t.mock.method(global, 'fetch', async (url) => {
+        registrations++;
+        await socket.restart();
+        const query = new URL(url).searchParams;
+        accounts.set(query.get('PN'), { password: query.get('PW') });
+        return { json: async () => ({ res: true, err: [] }) };
+    });
+
+    socket = quiet(new GgeSocket(`ws://127.0.0.1:${game.address().port}`, 'EmpireEx_3', 'user', 'secret', 1, '3'));
+    t.after(() => socket.disconnect(false));
+    await socket.connect();
+    assert.equal(registrations, 1);
+    assert.equal(socket.connected.isSet, true);
+});

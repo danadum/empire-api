@@ -11,6 +11,7 @@ getSockets().then(async sockets => {
         // }
         for (const [serverHeader, socket] of Object.entries(newSockets)) {
             if (!(serverHeader in sockets) || isDown(sockets[serverHeader])) {
+                socket.generation = sockets[serverHeader]?.generation ?? 0;
                 sockets[serverHeader] = socket;
                 socket.connect();
             }

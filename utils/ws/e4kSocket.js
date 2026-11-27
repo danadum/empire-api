@@ -16,6 +16,7 @@ class E4kSocket {
         this.parked = false;
         this.generation = 0;
         this.attempt = 0;
+        this.registering = false;
     }
 
     // Every connect() is a new attempt: callbacks of an older socket or timer check it and leave the newer one alone.
@@ -25,7 +26,7 @@ class E4kSocket {
         this.reconnect = true;
         this.parked = false;
         const account = accountFor(this.serverHeader, this.generation, this.username, this.password);
-        let registering = false;
+        this.registering = false;
         if (this.cooldownTimer) {
             clearTimeout(this.cooldownTimer);
             this.cooldownTimer = null;
@@ -79,7 +80,7 @@ class E4kSocket {
                     console.log(`### socket ${this.serverHeader}: account generation ${this.generation} missing, no registration left today ###`);
                     return this.park();
                 }
-                registering = true;
+                this.registering = true;
                 this.socket.sendJsonCommand("core_reg", {PN: account.username, PW: account.password, MAIL: `${account.username}@mail.com`, LANG: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null", REF: ""});
                 const regResponse = await this.socket.waitForJsonResponse("core_reg");
                 if (regResponse.payload.status !== 10005) {
@@ -111,7 +112,7 @@ class E4kSocket {
                     this.connect();
                 }, cooldown);
                 return;
-            } else if (registering) {
+            } else if (this.registering) {
                 this.park();
             } else {
                 this.disconnect(false);
@@ -120,11 +121,13 @@ class E4kSocket {
             if (!current()) return;
             console.log(`### error connecting to socket ${this.serverHeader} ###`);
             console.log(error.message);
-            if (registering) {
+            if (this.registering) {
                 this.park();
             } else {
                 this.disconnect(false);
             }
+        } finally {
+            if (current()) this.registering = false;
         }
     }
 
@@ -150,6 +153,8 @@ class E4kSocket {
     }
 
     async restart() {
+        // A registration in flight would be sent twice by a second attempt.
+        if (this.registering) return;
         this.disconnect(false);
         this.reconnect = true;
         await this.connect();

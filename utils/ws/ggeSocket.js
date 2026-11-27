@@ -18,6 +18,7 @@ class GgeSocket {
         this.parked = false;
         this.generation = 0;
         this.attempt = 0;
+        this.registering = false;
     }
 
     // Every connect() is a new attempt: callbacks of an older socket or timer check it and leave the newer one alone.
@@ -27,7 +28,7 @@ class GgeSocket {
         this.reconnect = true;
         this.parked = false;
         const account = accountFor(this.serverHeader, this.generation, this.username, this.password);
-        let registering = false;
+        this.registering = false;
         if (this.cooldownTimer) {
             clearTimeout(this.cooldownTimer);
             this.cooldownTimer = null;
@@ -107,7 +108,7 @@ class GgeSocket {
                     console.log(`### socket ${this.serverHeader}: account generation ${this.generation} missing, no registration left today ###`);
                     return this.park();
                 }
-                registering = true;
+                this.registering = true;
                 // Registration goes over HTTP; the login then happens on a new connection.
                 this.closeQuietly();
                 const response = await fetch(`https://lp2.goodgamestudios.com/register/index.json?gameId=12&networkId=${this.networkId}&COUNTRY=FR&forceGeoip=false&forceInstance=true&PN=${account.username}&LANG=fr-FR&MAIL=&PW=${account.password}&AID=0&adgr=0&adID=0&camp=0&cid=&journeyHash=1720629282364650193&keyword=&matchtype=&network=&nid=0&placement=&REF=&tid=&timeZone=14&V=&campainPId=0&campainCr=0&campainLP=0&DID=0&websiteId=380635&gci=0&adClickId=&instance=${this.instance}`, { signal: AbortSignal.timeout(60 * 1000) });
@@ -125,11 +126,13 @@ class GgeSocket {
             if (!current()) return;
             console.log(`### error connecting to socket ${this.serverHeader} ###`);
             console.log(error.message);
-            if (registering) {
+            if (this.registering) {
                 this.park();
             } else {
                 this.disconnect(false);
             }
+        } finally {
+            if (current()) this.registering = false;
         }
     }
 
@@ -155,6 +158,8 @@ class GgeSocket {
     }
 
     async restart() {
+        // A registration in flight would be sent twice by a second attempt.
+        if (this.registering) return;
         this.disconnect(false);
         this.reconnect = true;
         await this.connect();
