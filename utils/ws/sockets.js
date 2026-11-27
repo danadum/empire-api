@@ -8,13 +8,13 @@ async function getGgeSockets() {
 
     for (const networkId of networksIds) {
         const response = await fetch(`https://media.goodgamestudios.com/games-config/network/12/live/${networkId}.xml`, { signal: AbortSignal.timeout(60 * 1000) });
-        const data = new XMLParser().parse(await response.text());
+        const data = new XMLParser({ ignoreAttributes: false }).parse(await response.text());
         if (!Array.isArray(data.network.instances.instance)) {
             data.network.instances.instance = [data.network.instances.instance];
         }
         for (const server of data.network.instances.instance) {
             if (server.zone != "EmpireEx_23") {
-                const socket = new GgeSocket(`wss://${server.server}:443`, server.zone, process.env.USERNAME, process.env.PASSWORD, networkId);
+                const socket = new GgeSocket(`wss://${server.server}:443`, server.zone, process.env.USERNAME, process.env.PASSWORD, networkId, server['@_value']);
                 sockets[server.zone] = socket;
             }
         }
@@ -56,9 +56,10 @@ function restartSockets(sockets) {
     }
 }
 
-// A zone whose account is banned is not down: retrying every 10 min or restarting the whole API cannot fix it.
+// A parked zone (account banned, or no account could be registered) is not down: retrying every 10 min or restarting
+// the whole API cannot fix it; the daily restart tries it again.
 function isDown(socket) {
-    return socket.socket === null && !socket.banned;
+    return socket.socket === null && !socket.parked;
 }
 
 module.exports = {

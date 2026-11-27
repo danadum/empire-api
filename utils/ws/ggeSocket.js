@@ -1,27 +1,33 @@
 const { BaseWsSocket } = require('./baseWsSocket');
 const { BaseTcpSocket } = require('./baseTcpSocket');
 const { Event } = require('../event');
-const { accountFor, MAX_GENERATION } = require('../accounts');
+const { accountFor, takeRegistration, MAX_GENERATION, LONG_BAN } = require('../accounts');
 
 class GgeSocket {
-    constructor(url, serverHeader, username, password, networkId) {
+    constructor(url, serverHeader, username, password, networkId, instance) {
         this.url = url;
         this.serverHeader = serverHeader;
         this.username = username;
         this.password = password;
         this.networkId = networkId;
+        this.instance = instance;
         this.connected = new Event();
         this.reconnect = true;
         this.socket = null;
         this.cooldownTimer = null;
-        this.banned = false;
+        this.parked = false;
         this.generation = 0;
+        this.attempt = 0;
     }
 
+    // Every connect() is a new attempt: callbacks of an older socket or timer check it and leave the newer one alone.
     async connect() {
+        const attempt = ++this.attempt;
+        const current = () => attempt === this.attempt;
         this.reconnect = true;
-        this.banned = false;
+        this.parked = false;
         const account = accountFor(this.serverHeader, this.generation, this.username, this.password);
+        let registering = false;
         if (this.cooldownTimer) {
             clearTimeout(this.cooldownTimer);
             this.cooldownTimer = null;
@@ -32,8 +38,9 @@ class GgeSocket {
             } else {
                 this.socket = new BaseTcpSocket(this.url, this.serverHeader);
             }
-        
+
             this.socket.onError = (error) => {
+                if (!current()) return;
                 console.log(`### error in socket ${this.serverHeader} ###`);
                 console.log(error.message);
                 if (["ENOTFOUND", "ETIMEDOUT"].includes(error.code)) {
@@ -44,10 +51,11 @@ class GgeSocket {
             };
 
             this.socket.onClose = (code, reason) => {
+                if (!current()) return;
                 console.log(`### socket ${this.serverHeader} closed${this.reconnect ? "" : " permanently"} ###`);
                 if (this.reconnect) {
                     this.disconnect(true);
-                    setTimeout(() => this.connect(), 10 * 1000);
+                    setTimeout(() => { if (current() && this.reconnect) this.connect(); }, 10 * 1000);
                 } else {
                     this.disconnect(false);
                 }
@@ -55,7 +63,7 @@ class GgeSocket {
 
             if (!(await this.socket.opened.wait(60000))) throw new Error("Socket not connected");
             console.log(`### socket ${this.serverHeader} connected ###`)
-            
+
             this.socket.sendXmlMessage("sys", "verChk", "0", "<ver v='166' />")
             await this.socket.waitForXmlResponse("sys", "apiOK", "0")
             const responseAsync = this.socket.waitForJsonResponse("nfo")
@@ -74,55 +82,69 @@ class GgeSocket {
             const lliResponse = await this.socket.waitForJsonResponse("lli");
             if (lliResponse.payload.status === 0) {
                 this.connected.set();
-                this.ping();
-                await this.checkConnection();
+                this.ping(attempt);
+                await this.checkConnection(attempt);
             } else if (lliResponse.payload.status === 27) {
-                console.log(`### socket ${this.serverHeader}: account generation ${this.generation} banned for ${lliResponse.payload.data?.D?.RS ?? lliResponse.payload.data?.RS}s ###`);
-                if (this.generation < MAX_GENERATION) {
+                const remaining = lliResponse.payload.data?.RS ?? 0;
+                console.log(`### socket ${this.serverHeader}: account generation ${this.generation} banned for ${remaining}s ###`);
+                if (remaining >= LONG_BAN && this.generation < MAX_GENERATION) {
+                    this.closeQuietly();
                     this.generation++;
-                    this.socket.onClose = () => {};
-                    this.socket.onError = () => {};
-                    this.socket.close();
                     return this.connect();
                 }
-                this.banned = true;
-                this.disconnect(false);
+                this.park();
             } else if (lliResponse.payload.status === 453) {
                 const cooldown = (lliResponse.payload.data?.CD || 60) * 1000;
                 console.log(`### socket ${this.serverHeader} rate limited, retrying in ${cooldown / 1000}s ###`);
-                this.socket.onClose = () => {};
-                this.socket.onError = () => {};
-                this.socket.close();
+                this.closeQuietly();
                 this.cooldownTimer = setTimeout(() => {
                     this.cooldownTimer = null;
                     this.connect();
                 }, cooldown);
                 return;
             } else if (lliResponse.payload.status === 21) {
-                const serverIndex = this.serverHeader.includes("EmpireEx_") ? this.serverHeader.split("EmpireEx_")[1] : "1";
-                const response = await fetch(`https://lp2.goodgamestudios.com/register/index.json?gameId=12&networkId=${this.networkId}&COUNTRY=FR&forceGeoip=false&forceInstance=true&PN=${account.username}&LANG=fr-FR&MAIL=&PW=${account.password}&AID=0&adgr=0&adID=0&camp=0&cid=&journeyHash=1720629282364650193&keyword=&matchtype=&network=&nid=0&placement=&REF=&tid=&timeZone=14&V=&campainPId=0&campainCr=0&campainLP=0&DID=0&websiteId=380635&gci=0&adClickId=&instance=${serverIndex}`, { signal: AbortSignal.timeout(60 * 1000) });
-                const data = await response.json();
-                if (data.res && data.err.length === 0) {
-                    this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: account.username, PW: account.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1});
-                    const lliResponse = await this.socket.waitForJsonResponse("lli");
-                    if (lliResponse.payload.status === 0) {
-                        this.connected.set();
-                        this.ping();
-                        await this.checkConnection();
-                    } else {
-                        this.disconnect(false);
-                    }
-                } else {
-                    this.disconnect(false);
+                if (!takeRegistration()) {
+                    console.log(`### socket ${this.serverHeader}: account generation ${this.generation} missing, no registration left today ###`);
+                    return this.park();
                 }
+                registering = true;
+                // Registration goes over HTTP; the login then happens on a new connection.
+                this.closeQuietly();
+                const response = await fetch(`https://lp2.goodgamestudios.com/register/index.json?gameId=12&networkId=${this.networkId}&COUNTRY=FR&forceGeoip=false&forceInstance=true&PN=${account.username}&LANG=fr-FR&MAIL=&PW=${account.password}&AID=0&adgr=0&adID=0&camp=0&cid=&journeyHash=1720629282364650193&keyword=&matchtype=&network=&nid=0&placement=&REF=&tid=&timeZone=14&V=&campainPId=0&campainCr=0&campainLP=0&DID=0&websiteId=380635&gci=0&adClickId=&instance=${this.instance}`, { signal: AbortSignal.timeout(60 * 1000) });
+                const data = await response.json();
+                if (!current()) return;
+                if (!(data.res && data.err.length === 0)) {
+                    console.log(`### socket ${this.serverHeader}: registration of account generation ${this.generation} refused (${JSON.stringify(data.err)}) ###`);
+                    return this.park();
+                }
+                return this.connect();
             } else {
                 this.disconnect(false);
             }
         } catch (error) {
+            if (!current()) return;
             console.log(`### error connecting to socket ${this.serverHeader} ###`);
             console.log(error.message);
-            this.disconnect(false);
+            if (registering) {
+                this.park();
+            } else {
+                this.disconnect(false);
+            }
         }
+    }
+
+    closeQuietly() {
+        if (!this.socket) return;
+        this.socket.onClose = () => {};
+        this.socket.onError = () => {};
+        this.socket.close();
+    }
+
+    // Not retried by the 10-minute loop (isDown) nor a reason to restart the API; the daily restart tries it again.
+    park() {
+        this.closeQuietly();
+        this.parked = true;
+        this.disconnect(false);
     }
 
     disconnect(reconnect=true) {
@@ -138,20 +160,20 @@ class GgeSocket {
         await this.connect();
     }
 
-    async ping() {
-        if (!this.connected.isSet) return;
+    async ping(attempt) {
+        if (!this.connected.isSet || attempt !== this.attempt) return;
         this.socket.sendRawCommand("pin", ["<RoundHouseKick>"]);
-        setTimeout(() => this.ping(), 30 * 1000);
+        setTimeout(() => this.ping(attempt), 30 * 1000);
     }
 
-    async checkConnection() {
-        if (!this.connected.isSet) return;
+    async checkConnection(attempt) {
+        if (!this.connected.isSet || attempt !== this.attempt) return;
         try {
             this.socket.sendJsonCommand("gpi", {});
             await this.socket.waitForJsonResponse("gpi");
-            setTimeout(() => this.checkConnection(), 15 * 60 * 1000);
+            setTimeout(() => this.checkConnection(attempt), 15 * 60 * 1000);
         } catch (error) {
-            this.disconnect(true);
+            if (attempt === this.attempt) this.disconnect(true);
         }
     }
 }
