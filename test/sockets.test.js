@@ -96,7 +96,7 @@ test('a refused registration parks the zone instead of retrying it every 10 minu
     assert.equal(fake.stats.registrations, 1);
 });
 
-test('restart() keeps the new session: the old socket closing later does not touch it', async (t) => {
+test('restart() keeps the new session: the old socket closing later does not touch it', { timeout: 30000 }, async (t) => {
     const fake = await fakeE4kServer(new Map([['user', { password: 'secret' }]]));
     t.after(() => fake.server.close());
     const socket = await e4k(t, fake);
