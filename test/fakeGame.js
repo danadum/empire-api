@@ -10,10 +10,10 @@ function handshake(message, onCommand) {
     return onCommand(command, json ? JSON.parse(json) : {});
 }
 
-// Fake E4K server with a registry of accounts (name -> { password, banSeconds }) and counters.
-// options: banEveryone (seconds), closeAfterNotFound, refuseRegistration.
+// Fake E4K server with a registry of accounts (name -> { password, banSeconds }), counters and the requests received.
+// options: banEveryone (seconds), closeAfterNotFound, refuseRegistration, rateLimitOnce (names answered CD 1 once).
 async function fakeE4kServer(accounts, options = {}) {
-    const stats = { connections: 0, logins: 0, registrations: 0 };
+    const stats = { connections: 0, logins: 0, registrations: 0, requests: [] };
     const server = net.createServer((client) => {
         stats.connections++;
         let buffer = '';
@@ -27,6 +27,8 @@ async function fakeE4kServer(accounts, options = {}) {
                 const reply = handshake(message, (command, data) => {
                     if (command === 'core_lga') {
                         stats.logins++;
+                        stats.requests.push({ command, name: data.NM, aid: data.AID });
+                        if (options.rateLimitOnce?.delete(data.NM)) return '%xt%core_lga%1%10458%{"CD":1}%';
                         const account = accounts.get(data.NM);
                         const ban = options.banEveryone ?? account?.banSeconds;
                         if (ban) return `%xt%core_lga%1%10012%{"D":{"RS":${ban},"GDPR":0}}%`;
@@ -38,6 +40,7 @@ async function fakeE4kServer(accounts, options = {}) {
                     }
                     if (command === 'core_reg') {
                         stats.registrations++;
+                        stats.requests.push({ command, name: data.PN, aid: data.AID });
                         if (options.refuseRegistration) return '%xt%core_reg%1%10019%';
                         accounts.set(data.PN, { password: data.PW, mail: data.MAIL });
                         return '%xt%core_reg%1%10005%{}%';
@@ -62,4 +65,10 @@ function quiet(socket) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const LONG = 349934521;
 
-module.exports = { handshake, fakeE4kServer, quiet, sleep, LONG };
+async function until(condition, timeout = 5000) {
+    const end = Date.now() + timeout;
+    while (!condition() && Date.now() < end) await sleep(20);
+    return condition();
+}
+
+module.exports = { handshake, fakeE4kServer, quiet, sleep, until, LONG };
