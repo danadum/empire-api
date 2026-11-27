@@ -7,6 +7,7 @@ const { fakeE4kServer, quiet, sleep, LONG } = require('./fakeGame');
 
 // This file makes 2 registration attempts, the per-process daily limit, in two zones.
 limits.startupDelayMs = 0;
+limits.registrationGapMs = 0;
 limits.probePauseMs = 20;
 
 const e4k = async (t, fake, zone = 'EmpirefourkingdomsExGG') => {

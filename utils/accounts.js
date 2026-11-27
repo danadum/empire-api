@@ -9,10 +9,12 @@ const limits = {
     // Seconds. A longer ban moves the zone to its next account; a shorter one is waited out, plus banMarginMs.
     newAccountBan: 24 * 60 * 60,
     banMarginMs: 60 * 1000,
-    // In memory, per process: one registration attempt per zone per zoneSpacingMs, perDay attempts per 24 h for the
-    // whole process, none before startupDelayMs of uptime (a crash-looping API never registers).
+    // In memory, per process: one registration attempt per zone per zoneSpacingMs, perDay attempts per 24 h and
+    // registrationGapMs between two attempts for the whole process, none before startupDelayMs of uptime (a
+    // crash-looping API never registers).
     zoneSpacingMs: DAY,
     perDay: 2,
+    registrationGapMs: 60 * 60 * 1000,
     startupDelayMs: 10 * 60 * 1000,
     // Pause between two logins while looking for a zone's newest account, and how far that search gallops.
     probePauseMs: 2000,
@@ -48,6 +50,7 @@ function registrationWait(zone) {
     while (registrations.length && now - registrations[0] >= DAY) registrations.shift();
     const opens = [now + limits.startupDelayMs - process.uptime() * 1000];
     if (lastRegistration.has(zone)) opens.push(lastRegistration.get(zone) + limits.zoneSpacingMs);
+    if (registrations.length) opens.push(registrations[registrations.length - 1] + limits.registrationGapMs);
     if (registrations.length >= limits.perDay) opens.push(registrations[registrations.length - limits.perDay] + DAY);
     return Math.max(0, Math.ceil(Math.max(...opens) - now));
 }

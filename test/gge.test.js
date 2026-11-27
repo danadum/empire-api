@@ -6,6 +6,7 @@ const { accountFor, limits, DEVICE_ID } = require('../utils/accounts');
 const { handshake, quiet, LONG } = require('./fakeGame');
 
 limits.startupDelayMs = 0;
+limits.registrationGapMs = 0;
 limits.probePauseMs = 20;
 limits.perDay = 10;
 

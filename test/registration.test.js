@@ -7,6 +7,7 @@ const { fakeE4kServer, quiet, sleep, LONG } = require('./fakeGame');
 
 // Its own file, so its own process: the daily registration limit starts from zero. Tests run in order.
 limits.startupDelayMs = 0;
+limits.registrationGapMs = 0;
 limits.probePauseMs = 20;
 
 const e4k = async (t, fake, zone) => {

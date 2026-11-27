@@ -7,6 +7,7 @@ const { fakeE4kServer, quiet, sleep, until, LONG } = require('./fakeGame');
 
 // Its own process. Each test uses its own zone, so the per-zone spacing of one test does not reach the next.
 limits.startupDelayMs = 0;
+limits.registrationGapMs = 0;
 limits.probePauseMs = 20;
 limits.perDay = 100;
 
@@ -81,6 +82,23 @@ test('a zone registers once per spacing window: a second account waits, parked, 
     assert.ok(Date.now() - registered >= 1500);
     assert.equal(socket.generation, 2);
     assert.equal(fake.stats.registrations, 2);
+});
+
+test('two registrations of the process are a gap apart: the second zone waits, parked, then registers', async (t) => {
+    const first = await fakeE4kServer(registry('GapA', 1));
+    const second = await fakeE4kServer(registry('GapB', 1));
+    t.after(() => first.server.close());
+    t.after(() => second.server.close());
+    await e4k(t, first, 'GapA');
+    const registered = Date.now();
+    assert.equal(first.stats.registrations, 1);
+    lowered(t, { registrationGapMs: 1500 });
+    const socket = await e4k(t, second, 'GapB');
+    assert.equal(socket.parked, true);
+    assert.equal(second.stats.registrations, 0);
+    assert.ok(await until(() => socket.connected.isSet, 4000));
+    assert.ok(Date.now() - registered >= 1500);
+    assert.equal(second.stats.registrations, 1);
 });
 
 test('no registration before the startup delay, then the scheduled retry registers', async (t) => {

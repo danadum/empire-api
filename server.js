@@ -5,7 +5,13 @@ getSockets().then(async sockets => {
     // await wakeUpRecaptchaApi();
     connectSockets(sockets);
     setInterval(async () => {
-        const newSockets = await getSockets();
+        let newSockets;
+        try {
+            newSockets = await getSockets();
+        } catch (error) {
+            console.log(`### network config not refreshed: ${error.message} ###`);
+            return;
+        }
         // if (Object.keys(newSockets).some((serverHeader => !(serverHeader in sockets) || sockets[serverHeader].socket === null))) {
         //     await wakeUpRecaptchaApi();
         // }
