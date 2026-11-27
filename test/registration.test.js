@@ -2,10 +2,13 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { E4kSocket } = require('../utils/ws/e4kSocket');
 const { isDown } = require('../utils/ws/sockets');
-const { MAX_REGISTRATIONS_PER_DAY } = require('../utils/accounts');
+const { limits } = require('../utils/accounts');
 const { fakeE4kServer, quiet, sleep, LONG } = require('./fakeGame');
 
 // Its own file, so its own process: the daily registration limit starts from zero. Tests run in order.
+limits.startupDelayMs = 0;
+limits.registrationGapMs = 0;
+limits.probePauseMs = 20;
 
 const e4k = async (t, fake, zone) => {
     const socket = quiet(new E4kSocket(fake.url, zone, 'user', 'secret'));
@@ -24,7 +27,7 @@ test('a server closing the connection after "not found" parks the zone, without 
     assert.equal(fake.stats.logins, 1, 'no login every 10 s');
 });
 
-test(`at most ${MAX_REGISTRATIONS_PER_DAY} registration attempts a day for the whole process`, async (t) => {
+test(`at most ${limits.perDay} registration attempts a day for the whole process`, async (t) => {
     const accounts = new Map([['user', { password: 'secret', banSeconds: LONG }]]);
     const fake = await fakeE4kServer(accounts);
     t.after(() => fake.server.close());
@@ -33,5 +36,6 @@ test(`at most ${MAX_REGISTRATIONS_PER_DAY} registration attempts a day for the w
     const third = await e4k(t, fake, 'ZoneC');
     assert.equal(third.connected.isSet, false);
     assert.equal(third.parked, true);
+    assert.notEqual(third.retryTimer, null, 'retried when the oldest attempt of the day is 24 h old');
     assert.equal(fake.stats.registrations, 1, 'ZoneC never sent core_reg');
 });

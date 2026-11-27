@@ -2,18 +2,25 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { WebSocketServer } = require('ws');
 const { GgeSocket } = require('../utils/ws/ggeSocket');
-const { accountFor } = require('../utils/accounts');
+const { accountFor, limits, DEVICE_ID } = require('../utils/accounts');
 const { handshake, quiet, LONG } = require('./fakeGame');
+
+limits.startupDelayMs = 0;
+limits.registrationGapMs = 0;
+limits.probePauseMs = 20;
+limits.perDay = 10;
 
 test('GGE: a long ban moves to a new account, registered over HTTP on the zone\'s real instance', async (t) => {
     const accounts = new Map([['user', { password: 'secret', banSeconds: LONG }]]);
     const game = new WebSocketServer({ port: 0 });
     t.after(() => game.close());
     let logins = 0;
+    const aids = [];
     game.on('connection', (ws) => ws.on('message', (raw) => {
         const reply = handshake(raw.toString(), (command, data) => {
             if (command !== 'lli') return null;
             logins++;
+            aids.push(data.AID);
             const account = accounts.get(data.NOM);
             if (account?.banSeconds) return `%xt%lli%1%27%{"RS":${account.banSeconds},"GDPR":0}%`;
             if (!account) return '%xt%lli%1%21%';
@@ -37,6 +44,8 @@ test('GGE: a long ban moves to a new account, registered over HTTP on the zone\'
     assert.deepEqual(registered, ['2']);
     assert.ok(accounts.has(accountFor('EmpireExSP_2', 1, 'user', 'secret').username));
     assert.equal(logins, 3, 'banned login, "not found", login after registration');
+    const derived = accountFor('EmpireExSP_2', 1, 'user', 'secret').aid;
+    assert.deepEqual(aids, [DEVICE_ID, derived, derived]);
 });
 
 test('GGE: the daily restart during a registration does not send it twice', async (t) => {
@@ -67,4 +76,28 @@ test('GGE: the daily restart during a registration does not send it twice', asyn
     await socket.connect();
     assert.equal(registrations, 1);
     assert.equal(socket.connected.isSet, true);
+});
+
+for (const [gdpr, zone, instance] of [[1, 'EmpireEx_7', '7'], [true, 'EmpireEx_8', '8']]) test(`GGE: a deleted account (GDPR ${gdpr}) with a short RS moves to a new account, it is not waited out`, async (t) => {
+    const accounts = new Map([['user', { password: 'secret' }]]);
+    const game = new WebSocketServer({ port: 0 });
+    t.after(() => game.close());
+    game.on('connection', (ws) => ws.on('message', (raw) => {
+        const reply = handshake(raw.toString(), (command, data) => {
+            if (command !== 'lli') return null;
+            if (data.NOM === 'user') return `%xt%lli%1%27%{"RS":100,"GDPR":${gdpr}}%`;
+            return accounts.has(data.NOM) ? '%xt%lli%1%0%{}%' : '%xt%lli%1%21%';
+        });
+        if (reply) ws.send(reply);
+    }));
+    t.mock.method(global, 'fetch', async (url) => {
+        const query = new URL(url).searchParams;
+        accounts.set(query.get('PN'), { password: query.get('PW') });
+        return { json: async () => ({ res: true, err: [] }) };
+    });
+    const socket = quiet(new GgeSocket(`ws://127.0.0.1:${game.address().port}`, zone, 'user', 'secret', 1, instance));
+    t.after(() => socket.disconnect(false));
+    await socket.connect();
+    assert.equal(socket.connected.isSet, true);
+    assert.equal(socket.generation, 1);
 });
