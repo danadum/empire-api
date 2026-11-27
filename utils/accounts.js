@@ -40,7 +40,8 @@ function accountFor(zone, generation, username, password) {
     return {
         username: encode(digest('name'), ALPHABET.slice(0, 26), 1) + encode(digest('name').subarray(1), ALPHABET.slice(0, 26) + ALPHABET.slice(52), 11),
         password: encode(digest('password'), ALPHABET, 16),
-        aid: String(1 + aid[0] % 9) + encode(aid.subarray(1), ALPHABET.slice(52), 18),
+        // Shaped like the client's: Date.now() then 6 random digits.
+        aid: String(1600000000000 + aid.readUIntBE(0, 6) % 160000000000) + String(aid.readUInt32BE(6) % 1000000).padStart(6, '0'),
     };
 }
 

@@ -45,10 +45,15 @@ test('accounts are random-looking, stable, and different for each zone and gener
     assert.match(accountFor('Z', 1, 'user', 'secret').password, /^[a-zA-Z0-9]{16}$/);
 });
 
-test('each derived account has its own 19-digit device id, never the configured one', () => {
-    const aids = [1, 2, 3].map((generation) => accountFor('Z', generation, 'user', 'secret').aid);
-    for (const aid of aids) assert.match(aid, /^[1-9][0-9]{18}$/);
-    assert.equal(new Set([DEVICE_ID, ...aids, accountFor('Y', 1, 'user', 'secret').aid]).size, 5);
+test('each derived account has its own 19-digit device id shaped like the client\'s, never the configured one', () => {
+    const aids = Array.from({ length: 20 }, (_, i) => accountFor('Z', i + 1, 'user', 'secret').aid);
+    for (const aid of aids) {
+        assert.match(aid, /^[0-9]{19}$/);
+        const timestamp = Number(aid.slice(0, 13));
+        assert.ok(timestamp >= 1600000000000 && timestamp < 1760000000000, `${aid}: a millisecond timestamp, then 6 digits`);
+        assert.ok(BigInt(aid) < 2n ** 63n);
+    }
+    assert.equal(new Set([DEVICE_ID, ...aids, accountFor('Y', 1, 'user', 'secret').aid]).size, 22);
     assert.equal(accountFor('Z', 1, 'user', 'secret').aid, accountFor('Z', 1, 'user', 'secret').aid);
 });
 
