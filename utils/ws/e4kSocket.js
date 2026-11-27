@@ -1,6 +1,7 @@
 const { BaseWsSocket } = require('./baseWsSocket');
 const { BaseTcpSocket } = require('./baseTcpSocket');
 const { Event } = require('../event');
+const { accountFor, MAX_GENERATION } = require('../accounts');
 
 class E4kSocket {
     constructor(url, serverHeader, username, password) {
@@ -13,11 +14,13 @@ class E4kSocket {
         this.socket = null;
         this.cooldownTimer = null;
         this.banned = false;
+        this.generation = 0;
     }
 
     async connect() {
         this.reconnect = true;
         this.banned = false;
+        const account = accountFor(this.serverHeader, this.generation, this.username, this.password);
         if (this.cooldownTimer) {
             clearTimeout(this.cooldownTimer);
             this.cooldownTimer = null;
@@ -62,14 +65,21 @@ class E4kSocket {
             await this.socket.waitForXmlResponse("sys", "joinOK", "1")
             this.socket.sendXmlMessage("sys", "roundTrip", "1", "")
             await this.socket.waitForXmlResponse("sys", "roundTripRes", "1")
-            this.socket.sendJsonCommand("core_lga", {NM: this.username, PW: this.password, L: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null"});
+            this.socket.sendJsonCommand("core_lga", {NM: account.username, PW: account.password, L: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null"});
             const lgaResponse = await this.socket.waitForJsonResponse("core_lga");
             if (lgaResponse.payload.status === 10005) {
                 this.connected.set();
                 this.ping();
                 await this.checkConnection();
             } else if (lgaResponse.payload.status === 10012) {
-                console.log(`### socket ${this.serverHeader}: account banned for ${lgaResponse.payload.data?.D?.RS ?? lgaResponse.payload.data?.RS}s ###`);
+                console.log(`### socket ${this.serverHeader}: account generation ${this.generation} banned for ${lgaResponse.payload.data?.D?.RS ?? lgaResponse.payload.data?.RS}s ###`);
+                if (this.generation < MAX_GENERATION) {
+                    this.generation++;
+                    this.socket.onClose = () => {};
+                    this.socket.onError = () => {};
+                    this.socket.close();
+                    return this.connect();
+                }
                 this.banned = true;
                 this.disconnect(false);
             } else if (lgaResponse.payload.data?.CD !== undefined) {
@@ -84,10 +94,10 @@ class E4kSocket {
                 }, cooldown);
                 return;
             } else if (lgaResponse.payload.status === 10010) {
-                this.socket.sendJsonCommand("core_reg", {PN: this.username, PW: this.password, MAIL: `${this.username}@mail.com`, LANG: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null", REF: ""});
+                this.socket.sendJsonCommand("core_reg", {PN: account.username, PW: account.password, MAIL: `${account.username}@mail.com`, LANG: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null", REF: ""});
                 const regResponse = await this.socket.waitForJsonResponse("core_reg");
                 if (regResponse.payload.status === 10005) {
-                    this.socket.sendJsonCommand("core_lga", {NM: this.username, PW: this.password, L: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null"});
+                    this.socket.sendJsonCommand("core_lga", {NM: account.username, PW: account.password, L: "fr", AID: "1674256959939529708", DID: "5", PLFID: "3", ADID: "null", AFUID: "appsFlyerUID", IDFV: "null"});
                     const lgaResponse = await this.socket.waitForJsonResponse("core_lga");
                     if (lgaResponse.payload.status === 10005) {
                         this.connected.set();

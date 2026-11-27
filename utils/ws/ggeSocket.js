@@ -1,6 +1,7 @@
 const { BaseWsSocket } = require('./baseWsSocket');
 const { BaseTcpSocket } = require('./baseTcpSocket');
 const { Event } = require('../event');
+const { accountFor, MAX_GENERATION } = require('../accounts');
 
 class GgeSocket {
     constructor(url, serverHeader, username, password, networkId) {
@@ -14,11 +15,13 @@ class GgeSocket {
         this.socket = null;
         this.cooldownTimer = null;
         this.banned = false;
+        this.generation = 0;
     }
 
     async connect() {
         this.reconnect = true;
         this.banned = false;
+        const account = accountFor(this.serverHeader, this.generation, this.username, this.password);
         if (this.cooldownTimer) {
             clearTimeout(this.cooldownTimer);
             this.cooldownTimer = null;
@@ -67,14 +70,21 @@ class GgeSocket {
             // if (!response.ok) throw new Error("Failed to fetch recaptcha");
             // const recaptcha = await response.json();
 
-            this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: this.username, PW: this.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1 /*, RCT: recaptcha.token */});
+            this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: account.username, PW: account.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1 /*, RCT: recaptcha.token */});
             const lliResponse = await this.socket.waitForJsonResponse("lli");
             if (lliResponse.payload.status === 0) {
                 this.connected.set();
                 this.ping();
                 await this.checkConnection();
             } else if (lliResponse.payload.status === 27) {
-                console.log(`### socket ${this.serverHeader}: account banned for ${lliResponse.payload.data?.D?.RS ?? lliResponse.payload.data?.RS}s ###`);
+                console.log(`### socket ${this.serverHeader}: account generation ${this.generation} banned for ${lliResponse.payload.data?.D?.RS ?? lliResponse.payload.data?.RS}s ###`);
+                if (this.generation < MAX_GENERATION) {
+                    this.generation++;
+                    this.socket.onClose = () => {};
+                    this.socket.onError = () => {};
+                    this.socket.close();
+                    return this.connect();
+                }
                 this.banned = true;
                 this.disconnect(false);
             } else if (lliResponse.payload.status === 453) {
@@ -90,10 +100,10 @@ class GgeSocket {
                 return;
             } else if (lliResponse.payload.status === 21) {
                 const serverIndex = this.serverHeader.includes("EmpireEx_") ? this.serverHeader.split("EmpireEx_")[1] : "1";
-                const response = await fetch(`https://lp2.goodgamestudios.com/register/index.json?gameId=12&networkId=${this.networkId}&COUNTRY=FR&forceGeoip=false&forceInstance=true&PN=${this.username}&LANG=fr-FR&MAIL=&PW=${this.password}&AID=0&adgr=0&adID=0&camp=0&cid=&journeyHash=1720629282364650193&keyword=&matchtype=&network=&nid=0&placement=&REF=&tid=&timeZone=14&V=&campainPId=0&campainCr=0&campainLP=0&DID=0&websiteId=380635&gci=0&adClickId=&instance=${serverIndex}`, { signal: AbortSignal.timeout(60 * 1000) });
+                const response = await fetch(`https://lp2.goodgamestudios.com/register/index.json?gameId=12&networkId=${this.networkId}&COUNTRY=FR&forceGeoip=false&forceInstance=true&PN=${account.username}&LANG=fr-FR&MAIL=&PW=${account.password}&AID=0&adgr=0&adID=0&camp=0&cid=&journeyHash=1720629282364650193&keyword=&matchtype=&network=&nid=0&placement=&REF=&tid=&timeZone=14&V=&campainPId=0&campainCr=0&campainLP=0&DID=0&websiteId=380635&gci=0&adClickId=&instance=${serverIndex}`, { signal: AbortSignal.timeout(60 * 1000) });
                 const data = await response.json();
                 if (data.res && data.err.length === 0) {
-                    this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: this.username, PW: this.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1});
+                    this.socket.sendJsonCommand("lli", {CONM: 175, RTM: 24, ID: 0, PL: 1, NOM: account.username, PW: account.password, LT: null, LANG: "fr", DID: "0", AID: "1674256959939529708", KID: "", REF: "https://empire.goodgamestudios.com", GCI: "", SID: 9, PLFID: 1});
                     const lliResponse = await this.socket.waitForJsonResponse("lli");
                     if (lliResponse.payload.status === 0) {
                         this.connected.set();
