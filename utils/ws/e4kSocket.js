@@ -12,10 +12,12 @@ class E4kSocket {
         this.reconnect = true;
         this.socket = null;
         this.cooldownTimer = null;
+        this.banned = false;
     }
 
     async connect() {
         this.reconnect = true;
+        this.banned = false;
         if (this.cooldownTimer) {
             clearTimeout(this.cooldownTimer);
             this.cooldownTimer = null;
@@ -66,6 +68,10 @@ class E4kSocket {
                 this.connected.set();
                 this.ping();
                 await this.checkConnection();
+            } else if (lgaResponse.payload.status === 10012) {
+                console.log(`### socket ${this.serverHeader}: account banned for ${lgaResponse.payload.data?.D?.RS ?? lgaResponse.payload.data?.RS}s ###`);
+                this.banned = true;
+                this.disconnect(false);
             } else if (lgaResponse.payload.data?.CD !== undefined) {
                 const cooldown = (lgaResponse.payload.data.CD || 60) * 1000;
                 console.log(`### socket ${this.serverHeader} rate limited, retrying in ${cooldown / 1000}s ###`);

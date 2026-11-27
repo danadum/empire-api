@@ -13,10 +13,12 @@ class GgeSocket {
         this.reconnect = true;
         this.socket = null;
         this.cooldownTimer = null;
+        this.banned = false;
     }
 
     async connect() {
         this.reconnect = true;
+        this.banned = false;
         if (this.cooldownTimer) {
             clearTimeout(this.cooldownTimer);
             this.cooldownTimer = null;
@@ -71,6 +73,10 @@ class GgeSocket {
                 this.connected.set();
                 this.ping();
                 await this.checkConnection();
+            } else if (lliResponse.payload.status === 27) {
+                console.log(`### socket ${this.serverHeader}: account banned for ${lliResponse.payload.data?.D?.RS ?? lliResponse.payload.data?.RS}s ###`);
+                this.banned = true;
+                this.disconnect(false);
             } else if (lliResponse.payload.status === 453) {
                 const cooldown = (lliResponse.payload.data?.CD || 60) * 1000;
                 console.log(`### socket ${this.serverHeader} rate limited, retrying in ${cooldown / 1000}s ###`);

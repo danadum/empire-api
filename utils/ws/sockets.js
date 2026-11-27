@@ -56,8 +56,14 @@ function restartSockets(sockets) {
     }
 }
 
+// A zone whose account is banned is not down: retrying every 10 min or restarting the whole API cannot fix it.
+function isDown(socket) {
+    return socket.socket === null && !socket.banned;
+}
+
 module.exports = {
     getSockets,
     connectSockets,
-    restartSockets
+    restartSockets,
+    isDown
 };
