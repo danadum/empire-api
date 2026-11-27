@@ -80,7 +80,8 @@ class ZoneSocket {
             await this.socket.waitForXmlResponse("sys", "roundTripRes", "1")
 
             let outcome = await this.login(account);
-            if (outcome.status === 'missing') {
+            // After a short ban, a next account that is missing or answers anything unexpected: wait the ban out.
+            if (outcome.status === 'missing' || (outcome.status === 'other' && this.search?.shortBanEnd !== undefined)) {
                 if (this.search?.shortBanEnd !== undefined) {
                     const wait = Math.max(0, this.search.shortBanEnd - Date.now()) + limits.banMarginMs;
                     console.log(`### socket ${this.serverHeader}: no account after generation ${generation - 1}, waiting out its ban (${Math.round(wait / 1000)}s) ###`);
@@ -122,7 +123,7 @@ class ZoneSocket {
             } else if (outcome.status === 'banned') {
                 console.log(`### socket ${this.serverHeader}: account generation ${generation} banned (RS ${outcome.seconds}, GDPR ${outcome.gdpr}) ###`);
                 // A deleted account (GDPR) or a ban without a usable end never comes back.
-                if (outcome.gdpr === 1 || !(outcome.seconds > 0) || outcome.seconds > limits.newAccountBan) return this.longBan(attempt, generation);
+                if (outcome.gdpr || !(outcome.seconds > 0) || outcome.seconds > limits.newAccountBan) return this.longBan(attempt, generation);
                 // A newer account may work: used if it logs in, walked from if banned long, the ban waited out if missing.
                 this.search = { start: generation, banned: generation, missing: null, shortBanEnd: Date.now() + outcome.seconds * 1000 };
                 return this.probe(attempt, generation + 1);

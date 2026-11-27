@@ -146,6 +146,23 @@ test('a short ban on an older account does not hide a newer one that works', asy
     assert.equal(fake.stats.registrations, 0);
 });
 
+test('a short ban whose next account answers unexpectedly is waited out: parked, not down', async (t) => {
+    lowered(t, { banMarginMs: 300 });
+    const zone = 'ShortBanOther';
+    const next = accountFor(zone, 1, 'user', 'secret');
+    const accounts = new Map([['user', { password: 'secret', banSeconds: 1 }], [next.username, { password: 'not-the-derived-one' }]]);
+    const fake = await fakeE4kServer(accounts);
+    t.after(() => fake.server.close());
+    const socket = await e4k(t, fake, zone);
+    assert.equal(socket.parked, true);
+    assert.equal(isDown(socket), false);
+    assert.equal(socket.generation, 0);
+    accounts.get('user').banSeconds = 0;
+    assert.ok(await until(() => socket.connected.isSet, 3000));
+    assert.equal(socket.generation, 0);
+    assert.equal(fake.stats.registrations, 0);
+});
+
 test('a short ban followed by a newer account banned long continues the walk', async (t) => {
     lowered(t, { zoneSpacingMs: 0 });
     const zone = 'ShortBanThenLong';
